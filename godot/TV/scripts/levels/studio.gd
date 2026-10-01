@@ -14,11 +14,13 @@ extends "res://scripts/levels/level.gd"
 ## Show state outside the director (which camera is on air, REC, the teleprompter text) lives
 ## here: anyone asks the host (`request_*`), the host broadcasts `_show_state` to everyone.
 
-enum Event { NONE, DEAD_AIR, CREW_IN_SHOT, OFF_FRAME }
+enum Event { NONE, DEAD_AIR, CREW_IN_SHOT, OFF_FRAME, NOTHING_TO_SEE, FIELD_REPORT }
 
 const CameraRig := preload("res://scripts/camera_rig.gd")
 const ControlDesk := preload("res://scripts/control_desk.gd")
 const Broadcast := preload("res://scripts/broadcast.gd")
+const City := preload("res://scripts/levels/city.gd")
+const FieldCamera := preload("res://scripts/field_camera.gd")
 
 const FURNITURE := "res://assets/kenney/furniture-kit/"
 const DESK_ZONE := AABB(Vector3(-1.5, -1.0, -6.4), Vector3(3.0, 4.0, 1.8))
@@ -41,22 +43,49 @@ var subtitle := ""
 
 var broadcast: Broadcast
 var rigs: Array = []
+var field_camera: FieldCamera
 
 var _phase := Phase.PREP
 var _state_timer := 0.0
 var _prompter_text: Label3D
+var _sun: DirectionalLight3D
+var _door_light: StandardMaterial3D
 
 
 func _ready() -> void:
-	_add_overview(Vector3(9, 7, 9), Vector3(0, 1, -2))
+	_add_overview(Vector3(10, 3.4, 9), Vector3(0, 1, -3))
 	_light(Vector3(-2.5, 3.6, -3.0), 1.6, 7.0)
 	_light(Vector3(2.5, 3.6, -3.0), 1.6, 7.0)
 	_light(Vector3(0, 3.6, 6.0), 1.0, 10.0, Color(0.8, 0.85, 1.0))
 	_build_room()
 	_build_set()
 	_build_cameras()
+	_build_field_camera()
 	_build_broadcast()
 	_build_props()
+	City.new().build(self)
+
+
+func make_environment() -> Environment:
+	var env := Environment.new()
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.32, 0.52, 0.85)
+	sky_mat.sky_horizon_color = Color(0.72, 0.8, 0.9)
+	sky_mat.ground_horizon_color = Color(0.6, 0.62, 0.6)
+	sky_mat.ground_bottom_color = Color(0.4, 0.42, 0.4)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.6, 0.62, 0.68)
+	env.ambient_light_energy = 0.7
+	return env
+
+
+## The sun is global (lights every level), so it is on only while the studio is played.
+func set_active(active: bool) -> void:
+	_sun.visible = active
 
 
 # --- show rules ----------------------------------------------------------------
@@ -75,6 +104,9 @@ func is_live() -> bool:
 
 
 func server_tick(delta: float, director: Node) -> void:
+	if broadcast.sources[take] == field_camera:
+		_field_tick(delta, director)
+		return
 	var cam := broadcast.active_camera()
 	var anchors := 0
 	var anchors_in_frame := 0
@@ -110,6 +142,25 @@ func server_tick(delta: float, director: Node) -> void:
 		director.score += 1.0 * delta
 
 
+## The field camera is on air: anyone in its picture is "our reporter on the scene".
+func _field_tick(delta: float, director: Node) -> void:
+	var cam := broadcast.active_camera()
+	var blockers := _non_static_rids()
+	var on_screen := 0
+	for player in get_tree().get_nodes_in_group("players"):
+		if player.peer_id == field_camera.holder_id:
+			continue
+		var feet: Vector3 = player.global_position
+		if _visible_to(cam, feet + Vector3.UP * 1.5, blockers) or _visible_to(cam, feet + Vector3.UP, blockers):
+			on_screen += 1
+	if on_screen > 0:
+		director.event = Event.FIELD_REPORT
+		director.score += 1.0 * delta
+	else:
+		director.event = Event.NOTHING_TO_SEE
+		director.score -= 1.5 * delta
+
+
 func server_reset() -> void:
 	super.server_reset()
 	for rig in rigs:
@@ -124,6 +175,7 @@ func apply_state(phase: int, event: int, _sub: int, _time_left: float) -> void:
 	var phase_changed := phase != _phase
 	_phase = phase
 	var live := phase == Phase.LIVE
+	_door_light.emission_enabled = live
 	for i in broadcast.sources.size():
 		broadcast.sources[i].on_air = live and i == take
 	match phase:
@@ -166,6 +218,8 @@ func rules_text() -> String:
  - [b]Prompter op[/b]: also at the control desk. Types the teleprompter: it shows on the anchor's
    prompter screen and as subtitles on air, live, letter by letter.
  - [b]Camera ops[/b]: E at CAM 1 / 2 / 3 to operate it. Keep the anchor in frame.
+ - [b]Field crew[/b]: grab the FIELD CAM from the table by the EXIT and go out into the city.
+   When the director TAKEs it, whatever you point it at is on air: get a reporter in the picture.
  - [b]Floor crew[/b]: everyone else. Props, coffee, chaos. Stay out of the on-air shot.
 
 [b]GOAL[/b]: keep the RATINGS up for the whole show.
@@ -187,11 +241,15 @@ func event_text(event: int) -> String:
 			return "CREW IN SHOT! Get out of the frame!"
 		Event.OFF_FRAME:
 			return "WHERE'S THE ANCHOR? The camera on air can't see them!"
+		Event.NOTHING_TO_SEE:
+			return "The FIELD CAM is on air and shows nobody! Find a reporter!"
+		Event.FIELD_REPORT:
+			return "LIVE FROM THE SCENE"
 	return ""
 
 
 func guide_text() -> String:
-	return "E at CONTROL: TAKE cameras, REC, teleprompter\nE at a CAM: operate it"
+	return "E at CONTROL: TAKE cameras, REC, teleprompter\nE at a CAM: operate it\nFIELD CAM by the EXIT: take it outside"
 
 
 ## True if `point` is inside `cam`'s picture and nothing solid is in the way.
@@ -218,7 +276,14 @@ func _non_static_rids() -> Array[RID]:
 
 ## Testing (--seat=desk / --seat=cam1..3 on the command line).
 func debug_seat(player: Node, seat: String) -> void:
-	if seat == "anchor":
+	if seat == "field":  # out in the city with the field camera, on air
+		player.global_position = to_global(Vector3(31, 0.1, 30))
+		player.rotation.y = -PI * 0.6
+		field_camera.global_position = player.hold_point()
+		player._held = field_camera
+		field_camera.request_grab.rpc_id(1)
+		request_take.rpc_id(1, broadcast.sources.find(field_camera))
+	elif seat == "anchor":
 		player.global_position = to_global(Vector3(0, 0.1, -5.4))
 		player.rotation.y = PI
 	elif seat == "desk":
@@ -287,7 +352,40 @@ func _build_room() -> void:
 	_box(Vector3(24, 4, 0.3), Vector3(0, 2, -8.15), wall)
 	_box(Vector3(24, 4, 0.3), Vector3(0, 2, 10.15), wall)
 	_box(Vector3(0.3, 4, 18), Vector3(-12.15, 2, 1), wall)
-	_box(Vector3(0.3, 4, 18), Vector3(12.15, 2, 1), wall)
+	# East wall with the door to the city (z 2.8 .. 5.2).
+	_box(Vector3(0.3, 4, 10.8), Vector3(12.15, 2, -2.6), wall)
+	_box(Vector3(0.3, 4, 4.8), Vector3(12.15, 2, 7.6), wall)
+	_box(Vector3(0.3, 1.2, 2.4), Vector3(12.15, 3.4, 4.0), wall)
+	_box(Vector3(24.6, 0.3, 18.6), Vector3(0, 4.15, 1), Color(0.25, 0.25, 0.27))  # roof
+	_sign("EXIT -> CITY", Vector3(11.6, 3.1, 4.0), 48)
+	var facade := Label3D.new()
+	facade.text = "CHANNEL 6 STUDIOS"
+	facade.font_size = 160
+	facade.pixel_size = 0.01
+	facade.outline_size = 24
+	facade.modulate = Color(1, 0.85, 0.3)
+	facade.position = Vector3(12.32, 3.5, -3.5)
+	facade.rotation.y = PI / 2.0
+	add_child(facade)
+	_door_light = _mat(Color(0.3, 0.05, 0.05))
+	_door_light.emission = Color(1, 0.1, 0.1)
+	_door_light.emission_energy_multiplier = 2.5
+	var on_air_sign := _box(Vector3(0.1, 0.4, 1.2), Vector3(12.35, 3.2, 4.0), Color.WHITE, false) as MeshInstance3D
+	on_air_sign.material_override = _door_light
+	var on_air_text := Label3D.new()
+	on_air_text.text = "ON AIR"
+	on_air_text.font_size = 48
+	on_air_text.pixel_size = 0.006
+	on_air_text.position = Vector3(12.41, 3.2, 4.0)
+	on_air_text.rotation.y = PI / 2.0
+	add_child(on_air_text)
+
+	_sun = DirectionalLight3D.new()
+	_sun.rotation = Vector3(deg_to_rad(-55), deg_to_rad(35), 0)
+	_sun.light_energy = 1.1
+	_sun.shadow_enabled = true
+	_sun.directional_shadow_max_distance = 70.0
+	add_child(_sun)
 	var prop_table := Vector3(3, 0.9, 1)
 	var table := _box(prop_table, Vector3(-6, 0.45, 6), Color(0.45, 0.32, 0.2))
 	_dress(table, FURNITURE + "tableCross.glb", prop_table, 0.0, true)
@@ -357,12 +455,32 @@ func _build_cameras() -> void:
 		desk.add_child(monitor)
 
 
+## The handheld camera, on a table by the exit door.
+func _build_field_camera() -> void:
+	var table_size := Vector3(1.6, 0.8, 0.8)
+	var table := _box(table_size, Vector3(10.6, 0.4, 7.6), Color(0.45, 0.32, 0.2))
+	_dress(table, FURNITURE + "tableCross.glb", table_size, PI / 2.0, true)
+	_sign("FIELD KIT", Vector3(10.6, 1.7, 7.6), 48)
+	var size := Vector3(0.24, 0.26, 0.6)
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	var shape := BoxShape3D.new()
+	shape.size = size
+	field_camera = FieldCamera.new()
+	field_camera.setup("FIELD_CAM", mesh, shape, Color(0.15, 0.15, 0.17), 2.0)
+	field_camera.position = Vector3(10.6, 1.0, 7.6)
+	field_camera.rotation.y = PI / 2.0
+	add_child(field_camera)
+	field_camera.dress()
+
+
 ## The broadcast: the cameras feed the PROGRAM (with the channel graphics); its texture is
 ## shown on the big monitor backstage, a confidence monitor for the anchor and the desk.
 func _build_broadcast() -> void:
 	broadcast = Broadcast.new()
 	broadcast.name = "Broadcast"
 	broadcast.sources = rigs.duplicate()
+	broadcast.sources.append(field_camera)
 	add_child(broadcast)
 	broadcast.build()
 	broadcast.set_lower_third("", NEWS_LINE)

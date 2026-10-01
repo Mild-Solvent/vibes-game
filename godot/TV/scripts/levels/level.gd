@@ -148,6 +148,42 @@ func _dress(node: Node3D, model_path: String, size: Vector3, yaw := 0.0, stretch
 	return node
 
 
+## A model as-is (no fitting): its origin at `pos`, scaled `scale` times, turned `yaw`.
+## `solid` adds a box collider around the model's bounds. Returns the model node.
+func _place(model_path: String, pos: Vector3, scale := 1.0, yaw := 0.0, solid := false) -> Node3D:
+	var model: Node3D = load(model_path).instantiate()
+	ModelFit.fix_materials(model)
+	model.position = pos
+	model.rotation.y = yaw
+	model.scale = Vector3.ONE * scale
+	add_child(model)
+	if solid:
+		var bounds := ModelFit.bounds(model)
+		var body := StaticBody3D.new()
+		body.position = pos
+		body.rotation.y = yaw
+		var shape := BoxShape3D.new()
+		shape.size = bounds.size * scale
+		var collision := CollisionShape3D.new()
+		collision.shape = shape
+		collision.position = bounds.get_center() * scale
+		body.add_child(collision)
+		add_child(body)
+	return model
+
+
+## An invisible wall (keeps players inside the playable area).
+func _barrier(size: Vector3, pos: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.position = pos
+	var shape := BoxShape3D.new()
+	shape.size = size
+	var collision := CollisionShape3D.new()
+	collision.shape = shape
+	body.add_child(collision)
+	add_child(body)
+
+
 func _mat(color: Color, emission := 0.0) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color

@@ -11,6 +11,7 @@ static func fit(path: String, size: Vector3, yaw := 0.0, stretch := false) -> No
 	var holder := Node3D.new()
 	holder.name = "Model"
 	var model: Node3D = load(path).instantiate()
+	fix_materials(model)
 	model.rotation.y = yaw
 	holder.add_child(model)
 
@@ -23,6 +24,25 @@ static func fit(path: String, size: Vector3, yaw := 0.0, stretch := false) -> No
 	holder.scale = scale
 	holder.position = Vector3(-centre.x * scale.x, -size.y / 2.0 - bounds.position.y * scale.y, -centre.z * scale.z)
 	return holder
+
+
+## Some Kenney packs (the ones without a colormap) import fully metallic, which turns them into
+## washed-out, sky-coloured mirrors. Make them matte. Materials are shared, so this sticks.
+static func fix_materials(node: Node) -> void:
+	for mesh_instance in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = mesh_instance.mesh
+		if mesh == null:
+			continue
+		for i in mesh.get_surface_count():
+			var mat := mesh.surface_get_material(i) as StandardMaterial3D
+			if mat and mat.metallic > 0.0:
+				mat.metallic = 0.0
+				mat.roughness = 1.0
+
+
+## The bounding box of `node` and everything under it, in `node`'s own space.
+static func bounds(node: Node3D) -> AABB:
+	return _bounds(node, Transform3D.IDENTITY)
 
 
 ## The model's bounding box in its parent's space, before scaling.

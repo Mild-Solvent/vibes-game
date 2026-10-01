@@ -10,6 +10,7 @@ const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 8
 
 var player_name := "Crew"
+var port := DEFAULT_PORT  # --port=N on the command line (handy for testing)
 
 
 func _ready() -> void:
@@ -20,7 +21,7 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
-func host(port: int = DEFAULT_PORT) -> Error:
+func host() -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
@@ -32,7 +33,7 @@ func host(port: int = DEFAULT_PORT) -> Error:
 	return OK
 
 
-func join(address: String, port: int = DEFAULT_PORT) -> Error:
+func join(address: String) -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, port)
 	if err != OK:

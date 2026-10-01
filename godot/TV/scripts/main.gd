@@ -175,6 +175,8 @@ func _handle_command_line() -> void:
 			join_address = arg.trim_prefix("--join=")
 		elif arg.begins_with("--name="):
 			hud.set_player_name(arg.trim_prefix("--name="))
+		elif arg.begins_with("--port="):
+			Net.port = arg.trim_prefix("--port=").to_int()
 		elif arg.begins_with("--prep="):
 			director.prep_override = arg.trim_prefix("--prep=").to_float()
 		elif arg.begins_with("--live="):

@@ -33,6 +33,7 @@ func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mas
 	var config := SceneReplicationConfig.new()
 	config.add_property(NodePath(".:position"))
 	config.add_property(NodePath(".:rotation"))
+	config.add_property(NodePath(".:holder_id"))  # clients need it for the field camera's view
 	sync.replication_config = config
 	add_child(sync)
 

@@ -167,7 +167,7 @@ func _build_menu() -> void:
 	buttons.add_theme_constant_override("separation", 10)
 	box.add_child(buttons)
 	var host_button := Button.new()
-	host_button.text = "Host (port %d)" % Net.DEFAULT_PORT
+	host_button.text = "Host (port %d)" % Net.port
 	host_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host_button.pressed.connect(func(): host_pressed.emit(_name_edit.text, _mode_select.selected))
 	buttons.add_child(host_button)
