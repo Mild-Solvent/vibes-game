@@ -24,6 +24,9 @@ const Synth := preload("res://scripts/voice/synth.gd")
 const RATE := 16000
 const FRAME := 640  # samples per packet: 40 ms, 25 packets/s
 const GATE_DB := -40.0  # frames quieter than this are silence
+const JITTER_MAX_S := 0.18  # never let more than this much voice queue up (it's latency)
+const AGC_TARGET := 0.35  # incoming voice is levelled towards this RMS...
+const AGC_MAX_GAIN := 6.0  # ...but quiet mics are boosted at most this much
 const GATE_HOLD := 0.35  # keep sending this long after the voice drops (word endings)
 const HEAR_RANGE := 30.0
 const TALK_TIMEOUT := 0.25
@@ -57,7 +60,7 @@ var _rs_n := 0
 var _pending := PackedFloat32Array()  # captured 16 kHz samples not yet framed
 var _gate_until := 0.0
 
-## peer id -> {"target", "level", "peak", "last", "ring", "ring_pos", "ring_fill",
+## peer id -> {"target", "level", "peak", "last", "rec" (recent speech), "agc",
 ##   "p3d", "p3d_last", "wk", "wk_last", "wk_open", "wk_heard", "wk_dist"}
 var _peers := {}
 var _map := {}
@@ -73,6 +76,7 @@ func _ready() -> void:
 	_fake_mic = args.has("--fake-mic") or _fake_walkie
 	_bind("voice_mute", KEY_M)
 	_bind("walkie", KEY_V)
+	_bind("voice_ptt", KEY_C)  # push-to-talk key, when Settings.push_to_talk is on
 	_setup_buses()
 	_beep_down = Synth.beep_down()
 	_beep_up = Synth.beep_up()
@@ -101,7 +105,7 @@ func is_talking(peer_id: int) -> bool:
 ## echoey (the hag mimicking them). Falls back to a whisper if we never heard them talk.
 func play_mimic(peer_id: int, pos: Vector3) -> void:
 	var clip := PackedFloat32Array()
-	if _peers.has(peer_id) and _peers[peer_id]["ring_fill"] >= RATE * 1.5:
+	if _peers.has(peer_id) and (_peers[peer_id]["rec"] as PackedFloat32Array).size() >= RATE * 1.5:
 		clip = _ring_chunk(_peers[peer_id], _rng.randf_range(1.5, 4.0))
 	if clip.is_empty():
 		play_whisper(pos)
@@ -204,7 +208,8 @@ func _send_frames(me: int, now: float) -> void:
 		var db := linear_to_db(maxf(Codec.rms(frame), 0.00001))
 		if db > GATE_DB:
 			_gate_until = now + GATE_HOLD
-		var speaking := now < _gate_until and not muted
+		var ptt_ok: bool = not Settings.push_to_talk or Input.is_action_pressed("voice_ptt")
+		var speaking := now < _gate_until and not muted and ptt_ok
 		if not (speaking or transmitting):
 			continue
 		var level := _db_to_level(db)
@@ -258,6 +263,7 @@ func _voice_frame(packet: PackedByteArray) -> void:
 	var now := _now()
 	var samples := Codec.decode(packet, 2)
 	_note_level(sender, packet[1] / 255.0, now)
+	samples = _level_up(sender, samples)
 	if Codec.rms(samples) > db_to_linear(GATE_DB):
 		_record(sender, samples)
 	var players := _players()
@@ -371,9 +377,15 @@ func _push(player: Node, samples: PackedFloat32Array, st: Dictionary, key: Strin
 	var pb := player.call("get_stream_playback") as AudioStreamGeneratorPlayback
 	if pb == null:
 		return
-	if now - float(st[key]) > 0.3:  # a new burst: a little cushion against network jitter
+	# Keep latency flat: if more than ~0.18 s is already queued (jitter, a hitch, clock drift),
+	# throw the backlog away instead of letting the delay creep up sentence after sentence.
+	var queued := int(RATE * JITTER_MAX_S * 3.0) - pb.get_frames_available()
+	if queued > int(RATE * JITTER_MAX_S):
+		pb.clear_buffer()
+		queued = 0
+	if now - float(st[key]) > 0.3 and queued == 0:  # a new burst: a small cushion against jitter
 		var gap := PackedVector2Array()
-		gap.resize(960)  # 60 ms
+		gap.resize(int(RATE * 0.05))  # 50 ms
 		if pb.can_push_buffer(gap.size()):
 			pb.push_buffer(gap)
 	st[key] = now
@@ -426,9 +438,9 @@ func _pitch_of(peer: int, now: float) -> float:
 	return clampf(1.0 + 0.3 * wobble, 0.7, 1.3)
 
 
-## Full volume within 2 m, fading to silence by ~28 m.
+## Full volume within 6 m, fading to silence by ~30 m.
 func _proximity_db(d: float) -> float:
-	var g := pow(clampf(1.0 - (d - 2.0) / (HEAR_RANGE - 2.0), 0.0, 1.0), 1.6)
+	var g := pow(clampf(1.0 - (d - 6.0) / (HEAR_RANGE - 6.0), 0.0, 1.0), 1.3)
 	return linear_to_db(maxf(g, 0.0001))
 
 
@@ -466,6 +478,25 @@ func _db_to_level(db: float) -> float:
 	return clampf((db + 45.0) / 36.0, 0.0, 1.0)  # -45 dBFS = 0, -9 dBFS = 1
 
 
+## Automatic gain: quiet mics get boosted (up to AGC_MAX_GAIN), loud ones left alone, and a soft
+## clip stops the boost from distorting. The gain moves slowly so it doesn't pump.
+func _level_up(peer: int, samples: PackedFloat32Array) -> PackedFloat32Array:
+	var st := _state(peer)
+	var r := Codec.rms(samples)
+	if r > db_to_linear(GATE_DB):
+		var want := clampf(AGC_TARGET / maxf(r, 0.0001), 1.0, AGC_MAX_GAIN)
+		st["agc"] = lerpf(float(st["agc"]), want, 0.15)
+	var g: float = st["agc"]
+	if g <= 1.01:
+		return samples
+	var out := PackedFloat32Array()
+	out.resize(samples.size())
+	for i in samples.size():
+		var x := samples[i] * g
+		out[i] = x / (1.0 + absf(x) * 0.6)  # soft clip
+	return out
+
+
 func _note_level(peer: int, level: float, now: float) -> void:
 	var st := _state(peer)
 	st["target"] = level
@@ -477,30 +508,20 @@ func _note_level(peer: int, level: float, now: float) -> void:
 
 
 func _record(peer: int, samples: PackedFloat32Array) -> void:
+	# A plain append-and-trim buffer: native array ops only, trimmed in big steps.
 	var st := _state(peer)
-	var ring: PackedFloat32Array = st["ring"]
-	if ring.is_empty():
-		ring.resize(RING)
-	var pos: int = st["ring_pos"]
-	for s in samples:
-		ring[pos] = s
-		pos = (pos + 1) % RING
-	st["ring"] = ring
-	st["ring_pos"] = pos
-	st["ring_fill"] = mini(int(st["ring_fill"]) + samples.size(), RING)
+	var buf: PackedFloat32Array = st["rec"]
+	buf.append_array(samples)
+	if buf.size() > RING + RATE * 2:
+		buf = buf.slice(buf.size() - RING)
+	st["rec"] = buf
 
 
 func _ring_chunk(st: Dictionary, seconds: float) -> PackedFloat32Array:
-	var fill: int = st["ring_fill"]
-	var n := mini(int(seconds * RATE), fill)
-	var oldest := posmod(int(st["ring_pos"]) - fill, RING)
-	var start := oldest + _rng.randi_range(0, fill - n)
-	var ring: PackedFloat32Array = st["ring"]
-	var out := PackedFloat32Array()
-	out.resize(n)
-	for i in n:
-		out[i] = ring[(start + i) % RING]
-	return out
+	var buf: PackedFloat32Array = st["rec"]
+	var n := mini(int(seconds * RATE), buf.size())
+	var start := _rng.randi_range(0, buf.size() - n)
+	return buf.slice(start, start + n)
 
 
 # --- helpers ----------------------------------------------------------------------
@@ -540,7 +561,7 @@ func _free_later(node: Node, seconds: float) -> void:
 func _generator() -> AudioStreamGenerator:
 	var g := AudioStreamGenerator.new()
 	g.mix_rate = RATE
-	g.buffer_length = 0.5
+	g.buffer_length = JITTER_MAX_S * 3.0
 	return g
 
 
@@ -548,7 +569,7 @@ func _state(peer: int) -> Dictionary:
 	if not _peers.has(peer):
 		_peers[peer] = {
 			"target": 0.0, "level": 0.0, "peak": 0.0, "last": -10.0,
-			"ring": PackedFloat32Array(), "ring_pos": 0, "ring_fill": 0,
+			"rec": PackedFloat32Array(), "agc": 1.0,
 			"p3d": null, "p3d_last": -10.0,
 			"wk": null, "wk_last": -10.0, "wk_open": false, "wk_heard": -10.0, "wk_dist": 0.0,
 		}

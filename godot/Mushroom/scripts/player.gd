@@ -26,6 +26,8 @@ const JUMP_VELOCITY := 4.8
 const REACH := 3.2
 const HOLD_DISTANCE := 1.6
 const LOCAL_ONLY_LAYER := 2  # render layer for our own body, hidden from our own camera
+const EYE_HEIGHT := 1.28  # middle of the big chibi head (head spans ~0.87-1.70 on a 1.7 m character)
+const EYE_FORWARD := -0.32  # just in front of the face
 const DEADLY_FALL_SPEED := 17.0  # landing faster than this (m/s) is fatal
 const BREATH_SECONDS := 10.0
 const BATTERY_SECONDS := 150.0  # one battery keeps the flashlight on this long
@@ -63,6 +65,7 @@ var _pond_nag := 30.0
 var noclip := false  # cheat: fly through everything
 var _holding := false
 var _holding_checked := 0
+var _jump_was_down := false
 var _alive_for := 0.0  # seconds since spawning: no fall damage in the first few (joining, loading)
 var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
 var _beam: MeshInstance3D
@@ -99,7 +102,7 @@ func _ready() -> void:
 	for visual in _model.find_children("*", "VisualInstance3D", true, false):
 		if String(visual.name).to_lower().begins_with("head"):
 			visual.layers = LOCAL_ONLY_LAYER
-	camera.position.z = -0.12  # eyes at the front of the face, not inside the skull
+	camera.position.z = EYE_FORWARD  # eyes at the front of the face, not inside the skull
 	for visual in _monster.find_children("*", "VisualInstance3D", true, false):
 		visual.layers = LOCAL_ONLY_LAYER
 	if not _menu_open():
@@ -174,7 +177,7 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = 0.0
 		_update_torch(delta)
 		return
-	camera.position = Vector3(0, 0, -0.12)
+	camera.position = Vector3(0, 0, EYE_FORWARD)
 	_car_look = 0.0
 
 	if s == Team.Status.DEAD or noclip:
@@ -193,6 +196,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
+	var jump_now := _jump_pressed()  # every frame, so the edge detection never goes stale
 	var swimming := Terrain.in_water(global_position + Vector3(0, 0.9, 0))
 	if swimming:
 		velocity.y = move_toward(velocity.y, -0.6, _gravity * 0.4 * delta)
@@ -200,7 +204,7 @@ func _physics_process(delta: float) -> void:
 			velocity.y = 2.5
 	elif not is_on_floor():
 		velocity.y -= _gravity * delta
-	elif captured and Input.is_action_just_pressed("jump") and Team.stuck_in(peer_id) == "":
+	elif captured and jump_now and Team.stuck_in(peer_id) == "":
 		velocity.y = JUMP_VELOCITY
 
 	var input := Vector2.ZERO
@@ -252,6 +256,14 @@ func _physics_process(delta: float) -> void:
 	_update_dark(delta)
 	_pond_thoughts(delta)
 	_update_inspect(delta)
+
+
+## Space as a fresh press, whatever modifiers are held (Shift+Space while sprinting counts).
+func _jump_pressed() -> bool:
+	var down := Input.is_physical_key_pressed(KEY_SPACE) or Input.is_action_pressed("jump")
+	var fresh := down and not _jump_was_down
+	_jump_was_down = down
+	return fresh
 
 
 func holding_heavy() -> bool:
@@ -694,7 +706,9 @@ func _build() -> void:
 
 	# Kenney mini character, turned to face -Z (Godot's forward), feet on the floor.
 	var path := "res://assets/kenney/mini-characters/character-%s.glb" % CHARACTERS[variant % CHARACTERS.size()]
-	_model = ModelFit.fit(path, Vector3(1.2, 1.7, 1.2), PI)
+	# Sized by height (the box is wider than the chunky character), so everyone is 1.7 m tall
+	# and eye heights match.
+	_model = ModelFit.fit(path, Vector3(2.4, 1.7, 2.4), PI)
 	_model.position.y += 0.85
 	_model_base = _model.position.y
 	add_child(_model)
@@ -714,7 +728,7 @@ func _build() -> void:
 
 	head = Node3D.new()
 	head.name = "Head"
-	head.position.y = 1.55
+	head.position.y = EYE_HEIGHT
 	add_child(head)
 
 	camera = Camera3D.new()
@@ -793,7 +807,7 @@ func _process(delta: float) -> void:
 	# Down a hole: only your head sticks out.
 	var sunk := -1.3 if Team.stuck_in(peer_id) == "hole" else 0.0
 	_model.position.y = move_toward(_model.position.y, _model_base + sunk, 0.1)
-	head.position.y = move_toward(head.position.y, 1.55 + sunk, 0.1)
+	head.position.y = move_toward(head.position.y, EYE_HEIGHT + sunk, 0.1)
 	if is_multiplayer_authority():
 		camera.rotation.z = 1.3 if s == Team.Status.PASSED_OUT else 0.0
 	if _anim == null or delta <= 0.0:
