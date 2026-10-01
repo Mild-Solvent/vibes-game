@@ -174,7 +174,7 @@ func hide_all() -> void:
 	_stack.clear()
 	_confirm_box.visible = false
 	_show_top()
-	if in_game:
+	if in_game and get_window().has_focus():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 

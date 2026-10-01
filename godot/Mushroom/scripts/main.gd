@@ -32,6 +32,7 @@ var players_root: Node3D
 var spawner: MultiplayerSpawner
 var director: DirectorScript
 var hud: HudScript
+var _playing := false  ## the HUD is up and we're in a run
 var menu: CanvasLayer
 
 var _world_env: WorldEnvironment
@@ -115,12 +116,22 @@ func _on_menu_join(player_name: String, address: String, port: int) -> void:
 	Net.join(address if not address.is_empty() else "127.0.0.1")
 
 
+## Alt-tab, the Windows key or clicking another window: give the mouse back straight away.
+## (Clicking back into the game captures it again; see player.gd _unhandled_input.)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
 ## Every peer: the host pressed Start in the lobby.
 func _on_lobby_started() -> void:
 	if multiplayer.is_server() and not director.running:
 		director.start(0)
-	if menu.in_game:
-		return  # already playing (the lobby re-announces the start to late joiners)
+	# The menu flips its own in_game before telling us, so keep our own flag: already playing
+	# (the lobby re-announces the start to late joiners) -> nothing to do.
+	if _playing:
+		return
+	_playing = true
 	hud.show_game()
 	menu.in_game = true
 	menu.hide_all()
@@ -144,6 +155,7 @@ func _on_host_pressed(player_name: String, mode: int) -> void:
 	_activate(mode)
 	director.start(mode)
 	if Net.host() == OK:
+		_playing = true
 		hud.show_game()
 		menu.in_game = true
 		menu.hide_all()

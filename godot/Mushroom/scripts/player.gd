@@ -79,6 +79,8 @@ var _inspect_dist := 0.4
 var _model_base := 0.0
 
 
+const BEAM_SHADER := preload("res://shaders/torch_beam.gdshader")
+
 ## Where the owner says this body is (synced ~30 times a second); other peers glide towards it.
 var net_pos := Vector3.INF
 var net_rot := Vector3.ZERO
@@ -103,6 +105,7 @@ func _ready() -> void:
 		return
 	camera.current = true
 	camera.cull_mask &= ~LOCAL_ONLY_LAYER
+	_beam.layers = LOCAL_ONLY_LAYER  # your own torch beam: others see it, you never do
 	for visual in _visuals:
 		visual.layers = LOCAL_ONLY_LAYER
 	# You see your own body when you look down; only your head is hidden from your own camera.
@@ -112,7 +115,7 @@ func _ready() -> void:
 	camera.position.z = EYE_FORWARD  # eyes at the front of the face, not inside the skull
 	for visual in _monster.find_children("*", "VisualInstance3D", true, false):
 		visual.layers = LOCAL_ONLY_LAYER
-	if not _menu_open():
+	if not _menu_open() and get_window().has_focus():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	Team.battery_installed.connect(func(): battery = 1.0)
 
@@ -248,7 +251,9 @@ func _physics_process(delta: float) -> void:
 	var dropped := _fall_from - global_position.y
 	if is_on_floor() and not was_on_floor:
 		_fall_from = global_position.y
-	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and dropped > DEADLY_FALL_HEIGHT and not swimming 			and _alive_for > 4.0:
+	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and dropped > DEADLY_FALL_HEIGHT and not swimming \
+			and _alive_for > 4.0:
+		SessionLog.event("fall", "%s died falling %.1f m at %.1f m/s" % [display_name, dropped, _fall_speed])
 		Team.request_die.rpc_id(1, "falling from a great height")
 	elif is_on_floor() and not was_on_floor and _fall_speed > 6.0:
 		Sfx.play_all("jump_land", global_position)
@@ -475,6 +480,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_taste_or_use()
 	elif event.is_action_pressed("throw"):
 		if held():
+			SessionLog.event("throw", "%s threw %s" % [display_name, _held.name])
 			_held.request_release.rpc_id(1, true)
 			Sfx.play_all("throw", global_position)
 			_held = null
@@ -634,6 +640,7 @@ func _use_or_grab() -> void:
 			Team.request_drag.rpc_id(1, hit.peer_id)
 			return
 	if held():
+		SessionLog.event("drop", "%s dropped %s" % [display_name, _held.name])
 		_held.request_release.rpc_id(1, false)
 		Sfx.play("drop", global_position)
 		_held = null
@@ -644,6 +651,7 @@ func _use_or_grab() -> void:
 		_held = hit
 		_spin = Vector2.ZERO
 		_held.request_grab.rpc_id(1)
+		SessionLog.event("pickup", "%s picked up %s" % [display_name, hit.name])
 		Sfx.play("pickup", global_position)
 	elif hit is InteractableScript:
 		hit.request_use.rpc_id(1)
@@ -822,24 +830,21 @@ func _build() -> void:
 	_torch.position = Vector3(0.2, -0.15, -0.2)
 	_torch.visible = false
 	head.add_child(_torch)
-	# A faint beam you can see cutting through the fog (cheap: a soft additive cone).
+	# A faint beam other players see cutting through the fog: a cone, narrow at the torch, that
+	# fades out along its length and towards its silhouette so it reads as light, not a solid shape.
+	# Never drawn for its owner (you'd be standing inside it).
 	_beam = MeshInstance3D.new()
 	var cone := CylinderMesh.new()
-	cone.top_radius = 0.06
-	cone.bottom_radius = 3.2
+	cone.top_radius = 3.2  # far end (the cone is tipped forward, top first)
+	cone.bottom_radius = 0.06  # at the torch
 	cone.height = 16.0
-	cone.radial_segments = 12
+	cone.radial_segments = 16
 	cone.rings = 1
 	cone.cap_top = false
 	cone.cap_bottom = false
 	_beam.mesh = cone
-	var beam_mat := StandardMaterial3D.new()
-	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	beam_mat.albedo_color = Color(1.0, 0.95, 0.8, 0.035)
-	beam_mat.no_depth_test = false
+	var beam_mat := ShaderMaterial.new()
+	beam_mat.shader = BEAM_SHADER
 	_beam.material_override = beam_mat
 	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_beam.rotation.x = -PI / 2.0

@@ -15,6 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Mushroom Foraging"
+config/version="2026-10-02h"
 config/description="Four jobless friends, a forest full of weird mushrooms, and a village that pays for the safe ones."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
@@ -32,6 +33,7 @@ Hearing="*res://scripts/noise.gd"
 Voice="*res://scripts/voice.gd"
 Sfx="*res://scripts/sfx.gd"
 Settings="*res://scripts/settings.gd"
+SessionLog="*res://scripts/session_log.gd"
 
 [display]
 

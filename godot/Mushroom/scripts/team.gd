@@ -75,6 +75,7 @@ func _process(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
 	if not rescue.is_empty() and Time.get_ticks_msec() / 1000.0 - _rescue_last_pull > 0.6:
+		SessionLog.event("rescue", "rescue cancelled (let go or walked off)")
 		rescue = {}  # they let go
 		dirty = true
 	var now := Time.get_ticks_msec() / 1000.0
@@ -323,6 +324,7 @@ func next_day() -> void:
 func set_stuck(peer_id: int, what: String) -> void:
 	if players.has(peer_id):
 		players[peer_id]["stuck"] = what
+		SessionLog.event("stuck", "%s %s" % [players[peer_id]["name"], ("stuck in the " + what) if what != "" else "is free"])
 		_push()
 
 
@@ -522,6 +524,8 @@ func request_pull(target: int) -> void:
 			tell(peer, "%s is down a hole. You need a ROPE (Jano's shop) to get them out." % players[target]["name"])
 			return
 		rescue = {"target": target, "by": peer, "progress": 0.0}
+		SessionLog.event("rescue", "%s started pulling %s out of the %s" % [
+			players[peer]["name"], players[target]["name"], stuck_in(target)])
 		tell(target, "%s is pulling you out! Wiggle (A/D in the green) to help!" % players[peer]["name"])
 	if rescue["by"] != peer:
 		return

@@ -146,6 +146,7 @@ func _process(delta: float) -> void:
 	var now := _now()
 	var me := multiplayer.get_unique_id()
 	var players := _players()
+	_sample_ping()
 	_start_mic()
 	_update_ptt(players, me)
 	_read_input(delta)
@@ -417,20 +418,8 @@ func _push(player: Node, samples: PackedFloat32Array, st: Dictionary, key: Strin
 		pb.push_buffer(frames)
 
 
-## One line for the debug overlay (F3): how much delay sits where.
-func debug_line() -> String:
-	var rtt := -1
-	var mp := multiplayer.multiplayer_peer
-	if mp is ENetMultiplayerPeer and _connected():
-		var target := 1 if not multiplayer.is_server() else (multiplayer.get_peers()[0] if not multiplayer.get_peers().is_empty() else 0)
-		if target != 0:
-			var pr := (mp as ENetMultiplayerPeer).get_peer(target)
-			if pr:
-				rtt = int(pr.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
-	if rtt >= 0:
-		_pings.append(rtt)
-		if _pings.size() > 600:  # ~10 s of frames
-			_pings = _pings.slice(_pings.size() - 600)
+## Connection and voice numbers for the F3 overlay and the session log.
+func net_stats() -> Dictionary:
 	var lo := 0
 	var hi := 0
 	var avg := 0
@@ -441,14 +430,45 @@ func debug_line() -> String:
 			avg += v
 		avg /= _pings.size()
 	var bw: Vector2 = Net.bandwidth()
-	return ("ping %d ms (10 s: min %d avg %d max %d) · net out %.0f KB/s in %.0f KB/s
-"
-		+ "voice: mic backlog %d ms · play queue %d ms · sent %d recv %d · skip %d clear %d") % [
-		rtt, lo, avg, hi, bw.x / 1024.0, bw.y / 1024.0, _stats["mic_ms"], _stats["queued_ms"],
-		_stats["sent"], _stats["recv"], _stats["skipped"], _stats["cleared"]]
+	return {
+		"ping": _ping, "ping_min": lo, "ping_avg": avg, "ping_max": hi,
+		"out_kbs": bw.x / 1024.0, "in_kbs": bw.y / 1024.0,
+		"mic_ms": int(_stats["mic_ms"]), "queue_ms": int(_stats["queued_ms"]),
+		"sent": _stats["sent"], "recv": _stats["recv"], "skip": _stats["skipped"], "clear": _stats["cleared"],
+	}
 
 
-var _pings: Array[int] = []
+## Two lines for the debug overlay (F3): where the delay sits.
+func debug_line() -> String:
+	var n := net_stats()
+	var net := "ping %d ms (10 s: min %d avg %d max %d) · net out %.0f KB/s in %.0f KB/s" % [
+		n["ping"], n["ping_min"], n["ping_avg"], n["ping_max"], n["out_kbs"], n["in_kbs"]]
+	var voice := "voice: mic backlog %d ms · play queue %d ms · sent %d recv %d · skip %d clear %d" % [
+		n["mic_ms"], n["queue_ms"], n["sent"], n["recv"], n["skip"], n["clear"]]
+	return net + "\n" + voice
+
+
+var _ping := -1
+var _pings: Array[int] = []  # the last ~10 s of round-trip times, one per frame
+
+
+## Every frame while connected: the round trip to the host (or, on the host, to the first client).
+func _sample_ping() -> void:
+	_ping = -1
+	var mp := multiplayer.multiplayer_peer
+	if not mp is ENetMultiplayerPeer:
+		return
+	var peers := multiplayer.get_peers()
+	var target := 1 if not multiplayer.is_server() else (peers[0] if not peers.is_empty() else 0)
+	if target == 0:
+		return
+	var pr := (mp as ENetMultiplayerPeer).get_peer(target)
+	if pr == null:
+		return
+	_ping = int(pr.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
+	_pings.append(_ping)
+	if _pings.size() > 600:
+		_pings = _pings.slice(_pings.size() - 600)
 
 
 # --- per-frame playback and noise -------------------------------------------------
