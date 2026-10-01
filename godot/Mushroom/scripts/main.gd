@@ -171,6 +171,7 @@ func _handle_command_line() -> void:
 	var host := false
 	var join_address := ""
 	var day_time := -1.0
+	var autodrive := false
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--host":
 			host = true
@@ -178,6 +179,8 @@ func _handle_command_line() -> void:
 			join_address = arg.trim_prefix("--join=")
 		elif arg.begins_with("--name="):
 			hud.set_player_name(arg.trim_prefix("--name="))
+		elif arg == "--autodrive":
+			autodrive = true
 		elif arg == "--skip-intro":
 			hud.intro_enabled = false
 		elif arg.begins_with("--spawn="):
@@ -193,5 +196,9 @@ func _handle_command_line() -> void:
 		if day_time >= 0.0:  # testing: jump straight into the day at this point (0 morning, 1 midnight)
 			director._enter(1)
 			director.time_left = levels[0].live_duration() * (1.0 - day_time)
+		if autodrive:  # testing: the host gets in the car and floors it
+			var car := get_tree().get_first_node_in_group("car")
+			car.request_enter()
+			car.autodrive = true
 	elif not join_address.is_empty():
 		_on_join_pressed(hud.get_player_name(), join_address)

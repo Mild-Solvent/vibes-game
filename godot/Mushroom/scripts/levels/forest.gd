@@ -15,6 +15,13 @@ const CarScript := preload("res://scripts/car.gd")
 const BoarScript := preload("res://scripts/boar.gd")
 const InteractableScript := preload("res://scripts/interactable.gd")
 const PlayerScript := preload("res://scripts/player.gd")
+const CritterScript := preload("res://scripts/critter.gd")
+## Harmless animals: [model, count, size, speed]
+const CRITTERS := [
+	["animal-deer.glb", 10, Vector3(0.9, 1.5, 1.4), 2.2],
+	["animal-bunny.glb", 14, Vector3(0.35, 0.45, 0.5), 2.8],
+	["animal-fox.glb", 6, Vector3(0.5, 0.6, 0.9), 3.0],
+]
 
 const K := "res://assets/kenney/"
 const NATURE := K + "nature-kit/"
@@ -205,7 +212,7 @@ func _apply_daylight(t: float) -> void:
 		_env.background_color = sky
 		_env.ambient_light_color = Color(0.85, 0.85, 0.8).lerp(Color(0.25, 0.3, 0.5), 1.0 - day)
 		_env.ambient_light_energy = lerpf(0.03, 0.32, day)
-		_env.fog_light_color = Color(0.6, 0.68, 0.72).lerp(sky, 0.5)
+		_env.fog_light_color = Color(0.6, 0.68, 0.72).lerp(sky, 0.5).lerp(Color(0.015, 0.02, 0.03), 1.0 - day)
 		_env.fog_density = lerpf(0.03, 0.0035, day)
 
 
@@ -554,6 +561,16 @@ func _build_animals() -> void:
 		boar.build(K + "cube-pets/animal-hog.glb", home, SEED + i)
 		add_child(boar)
 		_boars.append(boar)
+	var n := 0
+	for entry in CRITTERS:
+		for i in entry[1]:
+			n += 1
+			var size: Vector3 = entry[2]
+			var model := ModelFit.fit(K + "cube-pets/" + entry[0], size, PI)
+			model.position.y += size.y / 2.0
+			var critter := CritterScript.new()
+			critter.setup(model, _mushroom_spot(), entry[3], SEED + 100 + n)
+			add_child(critter)
 
 
 # --- uses (host) ---------------------------------------------------------------------------

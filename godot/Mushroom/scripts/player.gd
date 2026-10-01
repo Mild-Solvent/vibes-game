@@ -48,6 +48,7 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _fall_speed := 0.0
 var _under_water := 0.0
 var _spin := Vector2.ZERO
+var _car_look := 0.0  # yaw offset from the car's heading while riding
 
 
 func setup(id: int, player_name: String, body_color: Color, character := 0) -> void:
@@ -113,10 +114,15 @@ func _physics_process(delta: float) -> void:
 	if in_car():
 		var car := get_car()
 		global_position = car.seat_position(car.seat_of(peer_id)) - Vector3(0, 0.6, 0)
+		# Face where the car faces (its front is +Z, ours is -Z), plus however you've looked round.
+		rotation.y = car.global_rotation.y + PI + _car_look
+		camera.position = Vector3(0, 1.4, 6.5)  # chase camera behind the car
 		velocity = Vector3.ZERO
 		_fall_speed = 0.0
 		_update_torch(delta)
 		return
+	camera.position = Vector3.ZERO
+	_car_look = 0.0
 
 	if s == Team.Status.DEAD:
 		_ghost_move(delta, captured)
@@ -216,7 +222,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		if status() == Team.Status.PASSED_OUT:
 			return
-		rotate_y(-event.relative.x * MOUSE_SENSITIVITY)
+		if in_car():
+			_car_look = wrapf(_car_look - event.relative.x * MOUSE_SENSITIVITY, -PI, PI)
+		else:
+			rotate_y(-event.relative.x * MOUSE_SENSITIVITY)
 		head.rotate_x(-event.relative.y * MOUSE_SENSITIVITY)
 		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-85), deg_to_rad(85))
 		return

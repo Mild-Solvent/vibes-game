@@ -17,6 +17,7 @@ const CRASH_SPEED := 17.0
 var seats := [0, 0, 0, 0]  # peer ids; the host decides and mirrors them through Team.car_seats
 var _home := Transform3D.IDENTITY
 var _last_speed := 0.0
+var autodrive := false  # testing: full throttle, straight ahead
 
 
 func build(model_path: String) -> void:
@@ -88,8 +89,8 @@ func _physics_process(_delta: float) -> void:
 	if not mine:
 		return
 	var driving: bool = seats[0] != 0 and seats[0] == multiplayer.get_unique_id()
-	if driving and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var throttle := Input.get_axis("move_back", "move_forward")
+	if driving and (autodrive or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
+		var throttle := 1.0 if autodrive else Input.get_axis("move_back", "move_forward")
 		var steer := Input.get_axis("move_right", "move_left")
 		var forward_speed := linear_velocity.dot(global_basis.z)
 		if throttle < 0.0 and forward_speed > 1.0:
