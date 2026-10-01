@@ -94,7 +94,7 @@ func _setup_input() -> void:
 	_bind_keys("grab", [KEY_E])
 	_bind_mouse("grab", MOUSE_BUTTON_LEFT)
 	_bind_keys("throw", [KEY_Q])
-	_bind_mouse("throw", MOUSE_BUTTON_RIGHT)
+	_bind_mouse("inspect", MOUSE_BUTTON_RIGHT)
 	_bind_keys("taste", [KEY_F])
 	_bind_keys("flashlight", [KEY_T])
 	_bind_keys("medkit", [KEY_H])

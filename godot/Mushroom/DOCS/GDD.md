@@ -137,30 +137,44 @@ reveals the name. Effects kick in **after a delay**, so you don't know who ate w
 
 ### The mushroom table
 
-| Species | Looks like | Effect | Delay after eating | Sells for | Spawn weight |
+20 forest species plus 4 cure ingredients (`mushroom.gd: KINDS / FEATURES / TELLS / WEIGHTS`).
+Look-alikes share a silhouette and almost the same colour; the **tell** is a detail you only see up
+close with the inspect mode. Babka still names everything; once she has, the field guide lists the tell.
+
+| Group | Species | Effect | Sells for | The tell (inspect it) | Spawn weight |
 |---|---|---|---|---|---|
-| **Porcini** (hríb) | Satan's bolete, rainbow bolete | food, safe | none | 20 € | 10 |
-| **Satan's bolete** | porcini (greyer cap, **red stem**) | POISON (240 s death timer) | 35 to 60 s | unsellable | 8 |
-| **Parasol** (bedľa) | death cap | food, safe | none | 15 € | 9 |
-| **Death cap** (muchotrávka) | parasol (smaller, greenish, white stem) | POISON | 35 to 60 s | unsellable | 8 |
-| **Chanterelle** (kuriatko) | false chanterelle, golden chanterelle | food, safe | none | 10 € | 10 |
-| **False chanterelle** | chanterelle (deeper orange) | TRIP (40 s) | 18 to 35 s | 12 € | 8 |
-| **Glowcap** | kobold cap (glows, pointy) | TRIP | 18 to 35 s | 30 € | 6 |
-| **Rainbow bolete** | porcini shape, pink/green, glows | STRONG: pass out 25 s, then trip | 25 to 40 s | 45 € | 4 |
-| **Golden chanterelle** | chanterelle (paler, glows) | food, safe, rare | none | 60 € | 2 |
-| **Screaming puffball** | Mother's mould (ball) | food, safe; screams when picked (the Hag hears) | none | 18 € | 6 |
-| **Devil's cigar** | glowcap / bone morel (tall, dark) | POISON | 35 to 60 s | unsellable | 6 |
-| **Witch's finger** | nothing else; dark, finger-shaped, glows | TRIP; the witch's fallback ingredient | 18 to 35 s | witch only | 4 |
-| **Mother's mould** | screaming puffball | CURE ingredient | n/a | witch only | sanatorium only |
-| **Kobold cap** | glowcap | CURE ingredient | n/a | witch only | mine only |
-| **Bone morel** | devil's cigar | CURE ingredient | n/a | witch only | crypt only |
-| **Drowned chanterelle** | chanterelle (teal) | CURE ingredient | n/a | witch only | lake island at midnight only |
+| Boletes | **Porcini** (hríb dubový) | food | 20 € | **pale** net on the stem, white pores | 8 |
+| | **Bitter bolete** (hríb žlčník) | food, but worthless | 1 € | **dark** net on the stem, **pinkish** pores | 6 |
+| | **Satan's bolete** | POISON | n/a | red stem with a red net, bruises **blue** | 5 |
+| White caps | **Field mushroom** (pečiarka) | food | 12 € | **pink** gills, a ring, **no** cup at the base | 8 |
+| | **Yellow stainer** | POISON | n/a | grey-white gills, bruises **yellow** where you hold it | 5 |
+| | **Death cap** (muchotrávka zelená) | POISON | n/a | white gills, a ring **and a cup (volva)** at the base | 6 |
+| Parasols | **Parasol** (bedľa vysoká) | food | 15 € | huge, snakeskin net on the stem, a ring | 7 |
+| | **Shaggy parasol** (bedľa červenejúca) | food | 12 € | shorter, shaggy scales, bruises orange-red | 5 |
+| | **Brown dapperling** (bedlička) | POISON | n/a | small, **no ring** | 4 |
+| Orange funnels | **Chanterelle** (kuriatko) | food | 10 € | **ridges** running down the stem, not gills | 8 |
+| | **False chanterelle** | TRIP | 12 € | real thin **gills**, more orange | 5 |
+| | **Jack-o'-lantern** | POISON | n/a | real gills, an orange net on the stem | 4 |
+| Moon caps (made up) | **Moon cap** | TRIP | 28 € | **white** gills under the cap | 4 |
+| | **False moon cap** | POISON | n/a | **blue** gills under the cap | 4 |
+| Odd ones | **Glowcap** | TRIP | 30 € | glows, pointy | 5 |
+| | **Rainbow bolete** | STRONG (pass out, then trip) | 45 € | pink/green, glows | 3 |
+| | **Golden chanterelle** | food, rare | 60 € | ridges, glows | 2 |
+| | **Screaming puffball** | food | 18 € | a white ball | 5 |
+| | **Devil's cigar** | POISON | n/a | tall, dark, a cup at the base | 4 |
+| | **Witch's finger** | TRIP; the witch's fallback ingredient | witch only | dark finger, glows | 4 |
+| Cure ingredients | **Mother's mould** / **Kobold cap** / **Bone morel** / **Drowned chanterelle** | CURE (give to the witch) | witch only | only in the sanatorium / mine / crypt / lake island at midnight | never random |
 
-420 mushrooms are scattered on the map at start (`forest.gd: MUSHROOM_COUNT`), weighted by the spawn
-column. Cure ingredients never spawn randomly.
+Effects kick in **later**: trips after 18 to 35 s, strong ones after 25 to 40 s, poison after 35 to 60 s
+(then 240 s to get a medkit or the witch). 420 mushrooms are scattered at start
+(`forest.gd: MUSHROOM_COUNT`); 40 of them are rare ones (golden chanterelles, rainbow boletes,
+glowcaps, moon caps and their twins, witch's fingers) that only grow in the **fog hollows**.
 
-**Handling (BUILT).** E picks up, wheel / R turns it in your hand to inspect it, Q throws, F tastes.
-Thrown too hard (over 6 m/s) three times, it breaks into bits (`BREAK_SPEED`, `BREAK_HITS`).
+**Handling (BUILT).** E picks up, Q throws, F tastes. **Inspect (BUILT):** hold the right mouse button
+with a mushroom in hand: you stop, a fully detailed copy comes up in front of your face, the background
+blurs. Mouse turns it (yaw/pitch), Q/E roll it, the wheel brings it from an extreme close-up (gills
+fill the screen) to arm's length. Species that bruise change colour on the parts you've been holding
+after a few seconds. Thrown too hard (over 6 m/s) three times, a mushroom breaks into bits.
 PLANNED (R.E.P.O. rule): each hit lowers its sell price, so carrying the basket carefully matters.
 
 **Selling (BUILT).** Babka Hela buys food and the fun ones (food, trip, strong), only species she has

@@ -38,7 +38,8 @@ const MUD_PATCHES := 16
 const HOLE_COUNT := 14
 const BRAMBLES := 40
 const HOLLOW_MUSHROOMS := 40  # rare ones, in the fog hollows
-const RARE := ["golden_chanterelle", "rainbow_bolete", "glowcap", "witch_finger", "golden_chanterelle", "porcini"]
+const RARE := ["golden_chanterelle", "rainbow_bolete", "glowcap", "witch_finger", "golden_chanterelle", "porcini",
+	"moon_cap", "false_moon_cap"]
 ## Harmless animals: [model, count, size, speed]
 const CRITTERS := [
 	["animal-deer.glb", 30, Vector3(0.9, 1.5, 1.4), 2.2],
@@ -363,7 +364,8 @@ func guide_text() -> String:
 			var e: int = MushroomScript.KINDS[k][0]
 			var what: String = ["food", "trippy", "VERY trippy", "POISON", "witchy", "cure"][e]
 			var worth := "%d €" % MushroomScript.price_of(k) if MushroomScript.sellable(k) else "worthless"
-			lines.append("%s (%s): %s, %s" % [MushroomScript.name_of(k), MushroomScript.describe(k), what, worth])
+			var tell := MushroomScript.tell_of(k)
+			lines.append("%s: %s, %s%s" % [MushroomScript.name_of(k), what, worth, ("  [look for: %s]" % tell) if tell != "" else ""])
 	if lines.size() == 1:
 		lines.append("Nothing yet. Put mushrooms on Babka's counter in the village.")
 	return "\n".join(lines)

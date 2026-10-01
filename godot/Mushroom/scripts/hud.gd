@@ -32,9 +32,20 @@ uniform vec3 grade = vec3(1.0);
 uniform float vignette = 0.35;
 uniform float grain = 0.035;
 uniform float lift = 0.0;
+uniform float focus = 0.0;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void fragment() {
 	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
+	if (focus > 0.0) {
+		// Cheap depth-of-field: blur everything but the middle of the screen.
+		float r = focus * 0.012 * smoothstep(0.12, 0.45, distance(SCREEN_UV, vec2(0.5)));
+		vec3 acc = c;
+		for (int i = 0; i < 8; i++) {
+			float a = float(i) * 0.785398;
+			acc += texture(screen_tex, SCREEN_UV + vec2(cos(a), sin(a)) * r).rgb;
+		}
+		c = acc / 9.0;
+	}
 	c = c * grade + vec3(lift);
 	float luma = dot(c, vec3(0.299, 0.587, 0.114));
 	c = mix(vec3(luma), c, 1.08);
@@ -84,6 +95,7 @@ var _phase := -1
 var menu: CanvasLayer  # the real menu (scripts/ui/menu.gd), set by main
 var _cheat_panel: Control
 var _post: ColorRect
+var _inspecting := false
 var _cheat_tag: Label
 var _over: ColorRect
 var _over_text: Label
@@ -424,20 +436,27 @@ func _show_game_over(stats: Dictionary) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+## Inspecting a mushroom: blur the background, darken the edges.
+func set_inspecting(on: bool) -> void:
+	_inspecting = on
+	if _post:
+		(_post.material as ShaderMaterial).set_shader_parameter("focus", 1.0 if on else 0.0)
+
+
 ## The level, every frame: grade the picture. Warm day, golden dusk, blue-green night;
 ## greener and darker under the old trees, washed out in the fog hollows.
 func set_grade(night: float, dusk: float, old_growth: float, hollow: float) -> void:
 	if _post == null:
 		return
 	var q: int = Settings.quality if "quality" in Settings else 2
-	_post.visible = q >= 1
+	_post.visible = q >= 1 or _inspecting
 	var g := Vector3(1.04, 1.0, 0.94)
 	g = g.lerp(Vector3(1.12, 0.96, 0.8), dusk)
 	g = g.lerp(Vector3(0.82, 0.97, 1.08), night)
 	g = g.lerp(Vector3(0.9, 1.0, 0.9), old_growth * 0.6)
 	var mat := _post.material as ShaderMaterial
 	mat.set_shader_parameter("grade", g)
-	mat.set_shader_parameter("vignette", 0.3 + 0.25 * night + 0.15 * old_growth)
+	mat.set_shader_parameter("vignette", 0.3 + 0.25 * night + 0.15 * old_growth + (0.35 if _inspecting else 0.0))
 	mat.set_shader_parameter("grain", 0.035 if q >= 2 else 0.0)
 	mat.set_shader_parameter("lift", 0.025 * hollow)
 

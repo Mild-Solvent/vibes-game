@@ -63,6 +63,11 @@ var _pond_nag := 30.0
 var noclip := false  # cheat: fly through everything
 var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
 var _beam: MeshInstance3D
+# Inspecting a held mushroom up close (local only): a detailed copy in front of the camera.
+var _inspecting := false
+var _inspect_copy: Node3D
+var _inspect_lamp: OmniLight3D
+var _inspect_dist := 0.4
 var _model_base := 0.0
 
 
@@ -182,7 +187,7 @@ func _physics_process(delta: float) -> void:
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if Team.is_tripping(peer_id):
 		input = input.rotated(sin(Time.get_ticks_msec() * 0.0013) * 0.6)  # the ground keeps moving
-	if Team.stuck_in(peer_id) != "":
+	if Team.stuck_in(peer_id) != "" or _inspecting:
 		input = Vector2.ZERO
 	var direction := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
@@ -224,6 +229,7 @@ func _physics_process(delta: float) -> void:
 	_update_torch(delta)
 	_update_dark(delta)
 	_pond_thoughts(delta)
+	_update_inspect(delta)
 
 
 func holding_heavy() -> bool:
@@ -337,6 +343,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
+	if _inspecting:
+		_inspect_input(event)
+		return
+	if event.is_action_pressed("inspect"):
+		var h := held()
+		if h and h.has_method("request_taste"):
+			_start_inspect(h)
+			return
+
 	if event is InputEventMouseMotion:
 		if status() == Team.Status.PASSED_OUT:
 			return
@@ -389,6 +404,73 @@ func _unhandled_input(event: InputEvent) -> void:
 			if Input.is_key_pressed(KEY_CTRL):
 				_spin.y = wrapf(_spin.y + step, -PI, PI)
 			_held.set_spin.rpc_id(1, _spin)
+
+
+# --- inspecting ------------------------------------------------------------------------
+
+
+func _start_inspect(mushroom: Node) -> void:
+	const Mushroom := preload("res://scripts/mushroom.gd")
+	_inspecting = true
+	_inspect_dist = 0.4
+	_inspect_copy = Mushroom.make_visual(mushroom.kind, true)
+	_inspect_copy.position = Vector3(0, -0.02, -_inspect_dist)
+	_inspect_copy.rotation = Vector3(0.3, 0.0, 0.0)
+	camera.add_child(_inspect_copy)
+	_inspect_lamp = OmniLight3D.new()
+	_inspect_lamp.light_energy = 0.35
+	_inspect_lamp.omni_range = 1.5
+	_inspect_lamp.position = Vector3(0.15, 0.2, 0.05)
+	camera.add_child(_inspect_lamp)
+	mushroom.visible = false
+	get_tree().call_group("hud", "set_inspecting", true)
+
+
+func _stop_inspect() -> void:
+	_inspecting = false
+	if _inspect_copy:
+		_inspect_copy.queue_free()
+		_inspect_copy = null
+	if _inspect_lamp:
+		_inspect_lamp.queue_free()
+		_inspect_lamp = null
+	if is_instance_valid(_held):
+		_held.visible = not _held.removed
+	get_tree().call_group("hud", "set_inspecting", false)
+
+
+## While inspecting: mouse turns it (yaw / pitch), wheel brings it closer or further,
+## Q / E roll it (held, see _process), letting go of right mouse puts it away.
+func _inspect_input(event: InputEvent) -> void:
+	if event.is_action_released("inspect") or held() == null:
+		_stop_inspect()
+		return
+	if event is InputEventMouseMotion:
+		var sens := _sensitivity() * 1.6
+		_inspect_copy.global_rotate(camera.global_basis.y.normalized(), event.relative.x * sens)
+		_inspect_copy.global_rotate(camera.global_basis.x.normalized(), event.relative.y * sens)
+	elif event.is_action_pressed("spin"):
+		_inspect_dist = maxf(_inspect_dist - 0.04, 0.12)
+	elif event.is_action_pressed("spin_back"):
+		_inspect_dist = minf(_inspect_dist + 0.04, 0.9)
+
+
+func _update_inspect(delta: float) -> void:
+	if not _inspecting:
+		return
+	if held() == null or status() == Team.Status.DEAD or status() == Team.Status.PASSED_OUT:
+		_stop_inspect()
+		return
+	var roll := 0.0
+	if Input.is_physical_key_pressed(KEY_Q):
+		roll += 1.0
+	if Input.is_physical_key_pressed(KEY_E):
+		roll -= 1.0
+	if roll != 0.0:
+		_inspect_copy.global_rotate(camera.global_basis.z.normalized(), roll * 2.2 * delta)
+	_inspect_copy.position = _inspect_copy.position.lerp(Vector3(0, -0.02, -_inspect_dist), 0.25)
+	const Mushroom := preload("res://scripts/mushroom.gd")
+	Mushroom.apply_bruise(_inspect_copy, _held.kind, _held.bruise)
 
 
 func _menu_open() -> bool:
@@ -528,8 +610,10 @@ func look_hint() -> String:
 	if held():
 		var h := "Q throw · E drop · wheel/R turn it"
 		var label := _label_of(_held)
+		if _inspecting:
+			return "%s\nmouse: turn · Q/E: roll · wheel: closer/further · let go of RMB" % label
 		if _held.has_method("request_taste"):
-			h += " · F TASTE · T at a friend: force-feed"
+			h += " · hold RMB: INSPECT · F TASTE · T at a friend: force-feed"
 		elif _held.has_method("request_dump"):
 			h += " · F tip it out"
 		elif _held is FieldGuideScript:
