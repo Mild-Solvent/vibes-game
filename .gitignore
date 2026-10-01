@@ -1,7 +1,7 @@
 # Godot 4
 .godot/
-/android/
-/build/
+android/
+build/
 *.tmp
 export_presets.cfg
 # OS

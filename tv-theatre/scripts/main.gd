@@ -5,7 +5,7 @@ extends Node3D
 ## matching node paths. The host picks which level is played; clients learn it from the director.
 ##
 ## Quick local testing from the command line (two terminals):
-##   godot --path . -- --host --show=2 --name=Adam
+##   godot --path . -- --host --show=1 --name=Adam
 ##   godot --path . -- --join=127.0.0.1 --name=Denis
 
 const PlayerScript := preload("res://scripts/player.gd")
@@ -14,7 +14,6 @@ const HudScript := preload("res://scripts/hud.gd")
 const LEVELS := [
 	[preload("res://scripts/levels/studio.gd"), "Studio", Vector3(0, 0, 0)],
 	[preload("res://scripts/levels/theatre.gd"), "Theatre", Vector3(400, 0, 0)],
-	[preload("res://scripts/levels/forest.gd"), "Forest", Vector3(-400, 0, 0)],
 ]
 
 const PLAYER_COLORS := [
