@@ -1,74 +1,93 @@
 extends "res://scripts/levels/level.gd"
 ## The world of Mushroom Foraging. Four friends lost their jobs and now live in a junk camp in
-## the forest. Every day they pick weird mushrooms, taste them to find out which are safe, and
-## sell the safe ones in the village. Cash buys medkits, batteries, a house, and casino spins.
-## Night gets properly dark (flashlights, boars). Dead friends can be brought back by the witch.
+## the forest. Every day they pick weird mushrooms and bring them to Babka Hela in the village,
+## who tells them what they are and buys the good ones. Uncle Fero wants his money every 3 days.
+## Nights get properly dark: wolves come out, and the Hungry Hag hunts anything that makes noise.
+## Sick or dead friends go to the witch, who sends you somewhere horrible for the cure.
 ##
-## A round is one day: PREP is the morning, LIVE the day sliding into night, WRAP the night recap.
+## A round is one day: PREP is dawn at camp, LIVE the day sliding into night, WRAP the night recap.
 ## The whole map comes from a fixed seed, so every peer builds the same world.
 
 const Terrain := preload("res://scripts/world/terrain.gd")
+const Vegetation := preload("res://scripts/world/vegetation.gd")
 const MushroomScript := preload("res://scripts/mushroom.gd")
 const BasketScript := preload("res://scripts/basket.gd")
 const OldSlotScript := preload("res://scripts/old_slot.gd")
 const CarScript := preload("res://scripts/car.gd")
 const BoarScript := preload("res://scripts/boar.gd")
+const WolfScript := preload("res://scripts/wolf.gd")
+const HagScript := preload("res://scripts/hag.gd")
 const InteractableScript := preload("res://scripts/interactable.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const CritterScript := preload("res://scripts/critter.gd")
-## Harmless animals: [model, count, size, speed]
-const CRITTERS := [
-	["animal-deer.glb", 10, Vector3(0.9, 1.5, 1.4), 2.2],
-	["animal-bunny.glb", 14, Vector3(0.35, 0.45, 0.5), 2.8],
-	["animal-fox.glb", 6, Vector3(0.5, 0.6, 0.9), 3.0],
-]
+const BodyScript := preload("res://scripts/body.gd")
+const DuelScript := preload("res://scripts/duel.gd")
+const TrapScript := preload("res://scripts/trap.gd")
 
 const K := "res://assets/kenney/"
 const NATURE := K + "nature-kit/"
+const PP := "res://assets/polypizza/"
 const SEED := 20261001
-const MUSHROOM_COUNT := 160
-const BOAR_COUNT := 7
-const WITCH_RECIPE := {"witch_finger": 2, "glowcap": 1}
-const SELL_RANGE := 7.0
-
-## Scattered scenery: [model, count, height range, collider radius (0 = walk through)]
-const FOREST := [
-	["tree_pineTallA.glb", 70, Vector2(8, 13), 0.35], ["tree_pineTallB.glb", 70, Vector2(8, 13), 0.35],
-	["tree_pineTallC.glb", 60, Vector2(7, 12), 0.35], ["tree_pineTallD.glb", 60, Vector2(7, 12), 0.35],
-	["tree_pineRoundB.glb", 50, Vector2(6, 10), 0.35], ["tree_pineDefaultA.glb", 50, Vector2(6, 9), 0.3],
-	["tree_pineDefaultB.glb", 50, Vector2(6, 9), 0.3], ["tree_pineSmallA.glb", 50, Vector2(2.5, 4), 0.2],
-	["tree_default.glb", 45, Vector2(6, 9), 0.35], ["tree_oak.glb", 40, Vector2(7, 10), 0.45],
-	["tree_fat.glb", 30, Vector2(5, 8), 0.45], ["tree_tall.glb", 40, Vector2(8, 12), 0.3],
-	["tree_thin.glb", 40, Vector2(6, 9), 0.25], ["tree_cone.glb", 30, Vector2(5, 8), 0.3],
-	["tree_simple.glb", 30, Vector2(5, 8), 0.3], ["tree_small.glb", 40, Vector2(2.5, 4), 0.2],
-	["tree_default_dark.glb", 40, Vector2(6, 9), 0.35], ["tree_oak_fall.glb", 25, Vector2(7, 10), 0.45],
-	["plant_bushLarge.glb", 140, Vector2(1.0, 1.6), 0.0], ["plant_bushDetailed.glb", 140, Vector2(0.7, 1.2), 0.0],
-	["plant_bushSmall.glb", 160, Vector2(0.4, 0.8), 0.0], ["plant_flatTall.glb", 220, Vector2(0.6, 1.1), 0.0],
-	["plant_flatShort.glb", 220, Vector2(0.3, 0.6), 0.0], ["grass.glb", 400, Vector2(0.3, 0.6), 0.0],
-	["grass_leafs.glb", 300, Vector2(0.3, 0.6), 0.0], ["flower_purpleA.glb", 90, Vector2(0.3, 0.5), 0.0],
-	["flower_redA.glb", 90, Vector2(0.3, 0.5), 0.0], ["flower_yellowA.glb", 90, Vector2(0.3, 0.5), 0.0],
-	["rock_tallA.glb", 40, Vector2(1.2, 2.6), 0.7], ["rock_smallA.glb", 120, Vector2(0.3, 0.6), 0.0],
-	["stone_largeA.glb", 50, Vector2(0.8, 1.6), 0.8], ["stone_tallB.glb", 25, Vector2(1.5, 3.0), 0.6],
-	["log.glb", 70, Vector2(0.4, 0.6), 0.0], ["stump_round.glb", 60, Vector2(0.4, 0.7), 0.35],
+const MUSHROOM_COUNT := 420
+const BOAR_COUNT := 10
+const WOLF_COUNT := 9
+const SPARE_BASKETS := 4
+const TRAP_COUNT := 70
+## Harmless animals: [model, count, size, speed]
+const CRITTERS := [
+	["animal-deer.glb", 30, Vector3(0.9, 1.5, 1.4), 2.2],
+	["animal-bunny.glb", 40, Vector3(0.35, 0.45, 0.5), 2.8],
+	["animal-fox.glb", 16, Vector3(0.5, 0.6, 0.9), 3.0],
+]
+## Scary places the witch sends you to: [place, script, ingredient, how she says it]
+const LOCATIONS := [
+	["sanatorium", "res://scripts/locations/sanatorium.gd", "mothers_mould",
+		"Mother's mould, from the morgue of Sanatórium Hôrka"],
+	["mine", "res://scripts/locations/mine.gd", "kobold_cap", "a Kobold cap, from deep in the Hodruša mine"],
+	["crypt", "res://scripts/locations/crypt.gd", "bone_morel", "a Bone morel, from the saint's coffin in the chapel crypt"],
+	["island", "res://scripts/locations/island.gd", "drowned_chanterelle",
+		"a Drowned chanterelle, from the island in the lake. At midnight."],
+]
+const SHOP := [
+	["medkit", "MEDKIT - cures poison, wakes the passed-out"], ["battery", "BATTERY - for everyone's torches"],
+	["basket", "BASKET"], ["compass", "COMPASS - no more getting lost"], ["flare", "FLARE - everyone sees it. Everything hears it."],
+	["whistle", "WHISTLE"], ["walkie", "WALKIE-TALKIE (hold V)"], ["wine", "CHEAP WINE"], ["duck", "RUBBER DUCK"],
+	["lottery", "LOTTERY TICKET"],
+]
+const EPITAPHS := [
+	"HERE LIES JOŽO\nhe said it was a chanterelle", "R.I.P. MILAN\nate the pretty one", "FERO'S LAST CUSTOMER\npaid late",
+	"TONO\n'I know a shortcut'", "UNKNOWN FORAGER\nstill has 3 € on him", "MAREK\nwent to check on the noise",
+	"HERE LIES A TOURIST\ndrank from the pond", "PALO\nwhistled at night", "ANNA\nshe was right, we didn't listen",
+	"VLADO\ndrove like he walked",
 ]
 
 var _sun: DirectionalLight3D
 var _env: Environment
 var _night := false
 var _night_lights: Array[Light3D] = []
+var _day_only: Array[Node3D] = []  # villagers etc. who go home to sleep at night
 var _mushrooms: Array = []
 var _boars: Array = []
-var _corpses := {}  # peer id -> Node3D
+var _wolves: Array = []
+var _hag: Node3D
+var _bodies := {}  # peer id -> the body prop left behind (dead, or passed out)
 var _house: Node3D
 var _basket: RigidBody3D
+var _spare_baskets: Array = []
 var _car: VehicleBody3D
 var _camp_fire: OmniLight3D
+var _locations := {}  # place name -> location node
+var _witch_orders := {}  # host: peer id -> ingredient kind
+var _counter: Area3D  # Babka's stall
+var _counter_scan := 0.0
 var _rng := RandomNumberGenerator.new()
 var _started := false
+var _police_check := 0.0
 var spawn_override := ""  # testing: spawn at a named place instead of camp
 
 
 func _ready() -> void:
+	add_to_group("level")
 	_add_overview(Vector3(22, 16, 30), Vector3(0, 0, 0))
 	_sun = DirectionalLight3D.new()
 	_sun.shadow_enabled = true
@@ -77,20 +96,37 @@ func _ready() -> void:
 	add_child(Terrain.build())
 	_build_water()
 	_rng.seed = SEED
-	_scatter_forest()
+	Vegetation.build(self, _rng)
 	_build_camp()
 	_build_village()
 	_build_casino()
 	_build_witch()
 	_build_ruin()
+	_build_locations()
 	_build_signs()
 	_build_mushrooms()
 	_build_animals()
+	_build_hunters()
+	_build_traps()
+	var duel := DuelScript.new()
+	duel.name = "Duel"
+	add_child(duel)
 	for light in _night_lights:
 		light.visible = false
 	Team.died.connect(_on_died)
 	Team.revived.connect(_on_revived)
 	Team.changed.connect(_on_team_changed)
+	Team.flare_fired.connect(_on_flare)
+
+
+## Host, all the time (not just while the day runs): Babka looks at her counter.
+func _physics_process(delta: float) -> void:
+	if not multiplayer.is_server():
+		return
+	_counter_scan += delta
+	if _counter_scan > 0.5:
+		_counter_scan = 0.0
+		_check_counter()
 
 
 # --- show rules ----------------------------------------------------------------------
@@ -109,15 +145,15 @@ func start_score() -> float:
 
 
 func prep_duration() -> float:
-	return 25.0
+	return 30.0
 
 
 func live_duration() -> float:
-	return 600.0
+	return 900.0
 
 
 func wrap_duration() -> float:
-	return 20.0
+	return 25.0
 
 
 func spawn_point(index: int) -> Vector3:
@@ -134,12 +170,16 @@ func make_environment() -> Environment:
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	_env.fog_enabled = true
 	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
-	_apply_daylight(0.0)
+	_apply_daylight(0.0, 0.0)
 	return _env
 
 
-func server_tick(_delta: float, director: Node) -> void:
+func server_tick(delta: float, director: Node) -> void:
 	director.score = float(Team.cash)
+	_police_check += delta
+	if _police_check > 1.0:
+		_check_missing(_police_check)
+		_police_check = 0.0
 
 
 func server_reset() -> void:
@@ -152,68 +192,89 @@ func server_reset() -> void:
 		m.position = _mushroom_spot()
 		m.rotation.y = _rng.randf() * TAU
 	for prop in find_children("*", "RigidBody3D", true, false):
-		if prop.has_method("reset_to_home") and not prop is MushroomScript:
+		if prop.has_method("reset_to_home") and not prop is MushroomScript and not prop is BodyScript:
 			prop.reset_to_home()
+	for loc in _locations.values():
+		loc.server_reset()
+	if _hag:
+		_hag.server_reset()
 
 
 func apply_state(phase: int, _event: int, _sub: int, time_left: float) -> void:
 	var t := 0.0  # 0 = morning, 1 = midnight
-	if phase == Phase.LIVE:
+	var dawn := 0.0  # 1 = first light, 0 = full morning
+	if phase == Phase.PREP:
+		dawn = clampf(time_left / prep_duration(), 0.0, 1.0)
+	elif phase == Phase.LIVE:
 		t = clampf(1.0 - time_left / live_duration(), 0.0, 1.0)
 	elif phase == Phase.WRAP:
 		t = 1.0
-	_apply_daylight(t)
+	_apply_daylight(t, dawn)
+	Sfx.set_time_of_day(t)
 	var night := t > 0.68
 	if night != _night:
 		_night = night
 		for light in _night_lights:
 			light.visible = night
+		for node in _day_only:
+			node.visible = not night
 		for boar in _boars:
 			boar.night = night
+		for wolf in _wolves:
+			wolf.night = night
+		if _hag:
+			_hag.night = night
+		for loc in _locations.values():
+			loc.set_night(night)
 
 
 func phase_text(phase: int, clock: String, _score: float, _sub: int) -> String:
+	var fero := "Uncle Fero wants %d € at the end of day %d" % [Team.quota_amount(), Team.quota_day()]
 	match phase:
 		Phase.PREP:
-			return "DAY %d  -  morning at camp  -  %s" % [Team.day, clock]
+			return "DAY %d  -  dawn at camp  -  %s\n%s" % [Team.day, clock, fero]
 		Phase.LIVE:
-			return "DAY %d  -  %s until midnight" % [Team.day, clock]
+			return "DAY %d  -  %s until midnight\n%s" % [Team.day, clock, fero]
 	return "NIGHT %d  -  get back to camp" % Team.day
 
 
 func guide_text() -> String:
-	var lines := ["FIELD JOURNAL (J)"]
+	var lines := ["FIELD JOURNAL - what Babka Hela told you"]
 	for k in MushroomScript.KINDS:
 		if Team.known.has(k):
 			var e: int = MushroomScript.KINDS[k][0]
-			var what: String = ["food", "trippy", "VERY trippy", "POISON", "witchy"][e]
+			var what: String = ["food", "trippy", "VERY trippy", "POISON", "witchy", "cure"][e]
 			var worth := "%d €" % MushroomScript.price_of(k) if MushroomScript.sellable(k) else "worthless"
-			lines.append("%s: %s, %s" % [MushroomScript.name_of(k), what, worth])
+			lines.append("%s (%s): %s, %s" % [MushroomScript.name_of(k), MushroomScript.describe(k), what, worth])
 	if lines.size() == 1:
-		lines.append("Nothing identified yet. Somebody has to taste one...")
+		lines.append("Nothing yet. Put mushrooms on Babka's counter in the village.")
 	return "\n".join(lines)
 
 
 # --- daylight ------------------------------------------------------------------------
 
 
-func _apply_daylight(t: float) -> void:
-	# Day until ~0.5, sunset to ~0.68, then night.
-	var day := 1.0 - smoothstep(0.45, 0.7, t)
+func _apply_daylight(t: float, dawn: float) -> void:
+	# Dawn in the morning prep, day until ~0.45, sunset to ~0.68, then night.
+	var day := (1.0 - smoothstep(0.45, 0.7, t)) * (1.0 - dawn * 0.75)
 	var sunset := smoothstep(0.35, 0.58, t) * (1.0 - smoothstep(0.6, 0.72, t))
+	var glow := maxf(sunset, dawn * (1.0 - dawn) * 3.0)  # pink-orange at sunrise and sunset
 	if _sun:
-		_sun.rotation = Vector3(lerpf(-1.1, -0.05, smoothstep(0.0, 0.7, t)), 0.7, 0.0)
+		var rise := lerpf(-0.08, -0.6, 1.0 - dawn)
+		_sun.rotation = Vector3(lerpf(rise, -0.05, smoothstep(0.1, 0.7, t)) if t > 0.0 else rise, 0.7, 0.0)
 		_sun.light_energy = lerpf(0.0, 0.95, day)
-		_sun.light_color = Color(1, 0.96, 0.88).lerp(Color(1, 0.62, 0.4), sunset * 0.7)
+		_sun.light_color = Color(1, 0.96, 0.88).lerp(Color(1, 0.6, 0.4), glow * 0.8)
 		_sun.visible = day > 0.01
 	if _env:
-		var sky := Color(0.55, 0.7, 0.85).lerp(Color(0.85, 0.55, 0.4), sunset * 0.6)
+		var sky := Color(0.55, 0.7, 0.85).lerp(Color(0.9, 0.55, 0.45), glow * 0.7)
 		sky = sky.lerp(Color(0.01, 0.012, 0.025), 1.0 - day)
 		_env.background_color = sky
 		_env.ambient_light_color = Color(0.85, 0.85, 0.8).lerp(Color(0.25, 0.3, 0.5), 1.0 - day)
 		_env.ambient_light_energy = lerpf(0.03, 0.32, day)
-		_env.fog_light_color = Color(0.6, 0.68, 0.72).lerp(sky, 0.5).lerp(Color(0.015, 0.02, 0.03), 1.0 - day)
-		_env.fog_density = lerpf(0.03, 0.0035, day)
+		var mist := Color(0.6, 0.68, 0.72).lerp(sky, 0.5).lerp(Color(0.015, 0.02, 0.03), 1.0 - day)
+		_env.fog_light_color = mist
+		# Foggy forest: thick at night, misty at dawn, never really clear.
+		_env.fog_density = lerpf(0.045, 0.009, day) + dawn * 0.012
 
 
 # --- people coming and going ------------------------------------------------------------
@@ -223,39 +284,32 @@ func _on_died(peer_id: int, reason: String) -> void:
 	var player := _player(peer_id)
 	var player_name: String = Team.players[peer_id]["name"] if Team.players.has(peer_id) else "Somebody"
 	get_tree().call_group("hud", "show_toast", "%s died of %s." % [player_name, reason])
+	get_tree().call_group("hud", "remember_highlight", "%s died of %s" % [player_name, reason], peer_id)
 	if multiplayer.is_server() and _car.seat_of(peer_id) >= 0:
 		_car.leave(peer_id)
-	if player == null:
-		return
-	var corpse := ModelFit.fit(
-		"res://assets/kenney/mini-characters/character-%s.glb" % PlayerScript.CHARACTERS[player.variant % PlayerScript.CHARACTERS.size()],
-		Vector3(1.2, 1.7, 1.2),
-		0.0
-	)
-	corpse.rotation = Vector3(-PI / 2.0, player.rotation.y, 0)
-	corpse.position = player.global_position + Vector3(0, 0.35, 0)
-	var tag := Label3D.new()
-	tag.text = "RIP %s" % player_name
-	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	tag.pixel_size = 0.004
-	tag.font_size = 40
-	tag.position = player.global_position + Vector3(0, 1.0, 0)
-	var holder := Node3D.new()
-	holder.add_child(corpse)
-	holder.add_child(tag)
-	add_child(holder)
-	if _corpses.has(peer_id):
-		_corpses[peer_id].queue_free()
-	_corpses[peer_id] = holder
+	if player != null:
+		_drop_body(peer_id, player)
+
+
+## Every peer: leave a floppy body where the player fell. It's a real prop: carry it to the
+## witch, or throw it in the car. Same name everywhere, so it syncs.
+func _drop_body(peer_id: int, player: Node3D) -> void:
+	var body: RigidBody3D = _bodies.get(peer_id)
+	if body == null:
+		body = BodyScript.new()
+		body.build(peer_id, player.variant, Team.players.get(peer_id, {}).get("name", "?"))
+		add_child(body)
+		_bodies[peer_id] = body
+	body.lay_down(player.global_position + Vector3(0, 0.5, 0), player.rotation.y)
 
 
 func _on_revived(peer_id: int) -> void:
-	if _corpses.has(peer_id):
-		_corpses[peer_id].queue_free()
-		_corpses.erase(peer_id)
+	var at := Terrain.place_centre("witch") + Vector3(3, 1.0, 3)
+	if _bodies.has(peer_id):
+		_bodies[peer_id].put_away()
 	var player := _player(peer_id)
 	if player and player.is_multiplayer_authority():
-		player.global_position = Terrain.place_centre("witch") + Vector3(3, 1.0, 3)
+		player.global_position = at
 	var player_name: String = Team.players[peer_id]["name"] if Team.players.has(peer_id) else "Somebody"
 	get_tree().call_group("hud", "show_toast", "The witch cackles. %s crawls out of the mud, alive!" % player_name)
 
@@ -277,7 +331,59 @@ func _player(peer_id: int) -> Node3D:
 	return null
 
 
-# --- building: the ground and the forest ------------------------------------------------
+# --- missing friend: the police ----------------------------------------------------------
+
+
+## Host: somebody alive has been far from everyone else for too long -> police timer. If it runs
+## out, the police raid the camp. Finding the friend (anyone within 20 m) calls it off.
+func _check_missing(step: float) -> void:
+	var alive := []
+	for p in get_tree().get_nodes_in_group("players"):
+		if Team.is_alive(p.peer_id):
+			alive.append(p)
+	if alive.size() < 2:
+		if Team.police_left >= 0.0:
+			Team.set_police(-1.0, 0)
+		return
+	var lost: Node3D = null
+	for p in alive:
+		var nearest := INF
+		for q in alive:
+			if q != p:
+				nearest = minf(nearest, p.global_position.distance_to(q.global_position))
+		if nearest > 160.0:
+			lost = p
+			break
+	if lost == null:
+		if Team.police_left >= 0.0:
+			var found: String = Team.players.get(Team.missing_peer, {}).get("name", "your friend")
+			Team.tell(0, "Found %s! Nobody calls the police." % found)
+			Team.set_police(-1.0, 0)
+		lost_for.clear()
+		return
+	lost_for[lost.peer_id] = lost_for.get(lost.peer_id, 0.0) + step
+	if Team.police_left < 0.0 and lost_for[lost.peer_id] > 150.0:
+		Team.set_police(Team.POLICE_SECONDS, lost.peer_id)
+		Team.tell(0, "Somebody in the village reported %s missing. Find them before the police come!" % Team.players[lost.peer_id]["name"])
+	elif Team.police_left == 0.0:
+		_police_raid(lost.peer_id)
+
+
+var lost_for := {}  # host: peer id -> seconds far from everyone
+
+
+func _police_raid(missing: int) -> void:
+	var lost_cash := Team.cash / 2
+	Team.add_cash(-lost_cash)
+	_basket.dump_all()
+	Team.set_police(-1.0, 0)
+	lost_for.clear()
+	Sfx.play_all("police_siren", Vector3.ZERO)
+	Team.tell(0, "POLICE RAID at camp! \"Where is %s?!\" They took %d € and your mushrooms." % [
+		Team.players.get(missing, {}).get("name", "your friend"), lost_cash])
+
+
+# --- building: water ----------------------------------------------------------------------
 
 
 func _build_water() -> void:
@@ -287,90 +393,17 @@ func _build_water() -> void:
 	var water := MeshInstance3D.new()
 	water.mesh = mesh
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.15, 0.35, 0.45, 0.78)
+	mat.albedo_color = Color(0.12, 0.28, 0.32, 0.85)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.roughness = 0.1
-	mat.metallic = 0.3
 	water.material_override = mat
 	water.position = Vector3(lake_c.x, Terrain.WATER_Y, lake_c.y)
 	add_child(water)
-	for i in 14:
+	for i in 24:
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(4.0, Terrain.LAKE[1] * 0.7)
+		var r := _rng.randf_range(16.0, Terrain.LAKE[1] * 0.85)
 		var p := Vector3(lake_c.x + cos(a) * r, Terrain.WATER_Y + 0.02, lake_c.y + sin(a) * r)
 		_model(NATURE + ("lily_large.glb" if i % 2 else "lily_small.glb"), Vector3(1.2, 0.1, 1.2), p, _rng.randf() * TAU)
-	_model(NATURE + "canoe.glb", Vector3(1.0, 0.5, 3.6), Vector3(lake_c.x - 30, Terrain.WATER_Y + 0.1, lake_c.y + 10), 0.6)
-
-
-## Hundreds of trees and plants as one MultiMesh per model (cheap to draw), plus trunk colliders.
-func _scatter_forest() -> void:
-	var trunks := StaticBody3D.new()
-	trunks.name = "Trunks"
-	add_child(trunks)
-	for entry in FOREST:
-		var info := _mesh_info(NATURE + entry[0])
-		if info.is_empty():
-			continue
-		var mesh: Mesh = info[0]
-		var local: Transform3D = info[1]
-		var aabb: AABB = info[2]
-		var transforms: Array[Transform3D] = []
-		var tries := 0
-		while transforms.size() < entry[1] and tries < entry[1] * 20:
-			tries += 1
-			var x := _rng.randf_range(-Terrain.SIZE * 0.4, Terrain.SIZE * 0.4)
-			var z := _rng.randf_range(-Terrain.SIZE * 0.4, Terrain.SIZE * 0.4)
-			var big: bool = entry[3] > 0.0
-			if not Terrain.is_clear(x, z, 0.0 if big else -3.0):
-				continue
-			var h := Terrain.height(x, z)
-			if h < Terrain.WATER_Y + 0.3:
-				continue
-			var height: float = _rng.randf_range(entry[2].x, entry[2].y)
-			var s := height / aabb.size.y
-			var basis := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s)
-			var origin := Vector3(x, h - aabb.position.y * s - 0.05, z)
-			transforms.append(Transform3D(basis, origin) * local)
-			if big:
-				var shape := CylinderShape3D.new()
-				shape.radius = entry[3] * clampf(height / 8.0, 0.6, 1.4)
-				shape.height = minf(height, 4.0)
-				var col := CollisionShape3D.new()
-				col.shape = shape
-				col.position = Vector3(x, h + shape.height / 2.0, z)
-				trunks.add_child(col)
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = mesh
-		mm.instance_count = transforms.size()
-		for i in transforms.size():
-			mm.set_instance_transform(i, transforms[i])
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = mm
-		if entry[3] == 0.0:
-			mmi.visibility_range_end = 70.0  # small stuff fades out in the distance
-		add_child(mmi)
-
-
-## The first mesh in a model, its transform inside the model, and its bounds in model space.
-func _mesh_info(path: String) -> Array:
-	var scene: Node3D = load(path).instantiate()
-	ModelFit.fix_materials(scene)
-	var found: MeshInstance3D = null
-	for n in scene.find_children("*", "MeshInstance3D", true, false):
-		found = n
-		break
-	if found == null:
-		scene.free()
-		return []
-	var local := Transform3D.IDENTITY
-	var node: Node = found
-	while node != scene:
-		local = (node as Node3D).transform * local
-		node = node.get_parent()
-	var result := [found.mesh, local, local * found.mesh.get_aabb()]
-	scene.free()
-	return result
 
 
 # --- building: places ----------------------------------------------------------------------
@@ -378,8 +411,8 @@ func _mesh_info(path: String) -> Array:
 
 func _build_camp() -> void:
 	var c := Terrain.place_centre("camp")
-	_sign("JUNK CAMP\nhome sweet home", c + Vector3(0, 3.2, -9), 72)
 	var sk := K + "survival-kit/"
+	_signpost("JUNK CAMP\nhome sweet home", Vector3(9, 0, -9), PI * 0.75)
 	_solid(NATURE + "tent_smallOpen.glb", Vector3(3.0, 2.0, 3.0), c + Vector3(-7, 0, -5), 0.9)
 	_solid(NATURE + "tent_smallOpen.glb", Vector3(3.4, 2.3, 3.4), c + Vector3(-1, 0, -8), 0.1)
 	_solid(NATURE + "tent_smallOpen.glb", Vector3(2.6, 1.8, 2.6), c + Vector3(6, 0, -6), -0.5)
@@ -393,7 +426,6 @@ func _build_camp() -> void:
 	_solid(sk + "barrel.glb", Vector3(0.8, 1.1, 0.8), c + Vector3(8, 0, 2), 0.0)
 	_solid(sk + "barrel.glb", Vector3(0.8, 1.1, 0.8), c + Vector3(8.9, 0, 2.6), 0.0)
 	_solid(sk + "box-large.glb", Vector3(1.2, 1.0, 1.2), c + Vector3(-9, 0, 0), 0.2)
-	_model(sk + "signpost.glb", Vector3(1.0, 2.2, 0.3), c + Vector3(11, 0, 2), -0.3)
 
 	_basket = BasketScript.new()
 	_basket.build(K + "mini-market/shopping-basket.glb")
@@ -403,62 +435,90 @@ func _build_camp() -> void:
 	_car = CarScript.new()
 	_car.build(K + "car-kit/suv.glb")
 	_car.position = c + Vector3(10, 1.0, -2)
-	_car.rotation.y = PI / 2.0 + 0.2  # nose towards the road
+	_car.rotation.y = PI / 2.0 + 0.4  # nose towards the road
 	add_child(_car)
 
 	var plot := InteractableScript.new()
 	plot.configure("HousePlot", Vector3(1.2, 1.4, 0.3), Vector3(-9, c.y + 0.7, 8),
 		"build a house here (%d €)" % Team.PRICES["house"], _use_house_plot)
 	add_child(plot)
-	_model(sk + "signpost.glb", Vector3(1.0, 1.4, 0.3), Vector3(-9, c.y, 8), 0.0)
-	_sign("HOUSE PLOT\n%d €" % Team.PRICES["house"], Vector3(-9, c.y + 2.0, 8), 40)
+	_signpost("HOUSE PLOT\n%d €" % Team.PRICES["house"], Vector3(-9, 0, 8), 0.0)
+
+	# The field guide: one book, one reader. Everyone else has to listen to them describe it.
+	var guide := preload("res://scripts/field_guide.gd").new()
+	guide.build()
+	guide.position = c + Vector3(-4, 1.2, 3)
+	add_child(guide)
 
 
 func _build_village() -> void:
 	var c := Terrain.place_centre("village")
-	_sign("HORNÁ LEHOTA\n(village)", c + Vector3(-30, 6, 0), 96)
-	var houses := ["a", "b", "d", "e", "f", "g", "h", "b", "e"]
+	_signpost("HORNÁ LEHOTA", Vector3(c.x - 44, 0, c.z - 6), -PI / 2.0, 72)
+	var houses := ["a", "b", "d", "e", "f", "g", "h", "b", "e", "a", "d"]
 	for i in houses.size():
 		var a := i * TAU / houses.size() + 0.3
-		var p := c + Vector3(cos(a) * 27, 0, sin(a) * 27)
 		if i == 0:
 			continue  # gap where the road comes in
+		var p := c + Vector3(cos(a) * 29, 0, sin(a) * 29)
 		_solid(K + "city-kit-suburban/building-type-%s.glb" % houses[i], Vector3(8, 7, 8), p, -a - PI / 2.0)
+		_night_lights.append(_light(p + Vector3(0, 2.5, 0) - Vector3(cos(a), 0, sin(a)) * 4.5, 0.8, 6.0, Color(1, 0.8, 0.5)))
 	var ft := K + "fantasy-town-kit/"
 	_solid(ft + "fountain-round.glb", Vector3(4, 1.6, 4), c, 0.0)
 	_solid(ft + "stall-red.glb", Vector3(3, 2.6, 2), c + Vector3(-6, 0, 7), PI)
-	_solid(ft + "stall-green.glb", Vector3(3, 2.6, 2), c + Vector3(7, 0, 7), PI)
+	_solid(ft + "stall-green.glb", Vector3(3, 2.6, 2), c + Vector3(8, 0, 7), PI)
 	_solid(ft + "cart.glb", Vector3(1.6, 1.4, 2.6), c + Vector3(10, 0, -6), 0.6)
 	for i in 6:
 		var a := i * TAU / 6.0
-		var p := c + Vector3(cos(a) * 12, 0, sin(a) * 12)
+		var p := c + Vector3(cos(a) * 13, 0, sin(a) * 13)
 		_model(ft + "lantern.glb", Vector3(0.6, 2.6, 0.6), p, 0.0)
 		_night_lights.append(_light(p + Vector3(0, 2.6, 0), 1.6, 12.0, Color(1.0, 0.8, 0.45)))
 
-	# Babka Hela buys mushrooms at the red stall; Jano runs the shop at the green one.
-	_npc("character-female-e", c + Vector3(-6, 0, 8.6), PI, "BABKA HELA\nbuys identified mushrooms")
-	var buyer := InteractableScript.new()
-	buyer.configure("Buyer", Vector3(3, 2, 1.2), c + Vector3(-6, 1, 6.6), "sell the basket to Babka Hela", _use_buyer)
-	add_child(buyer)
-	_npc("character-male-e", c + Vector3(7, 0, 8.6), PI, "JANO'S SHOP")
-	var medkit := InteractableScript.new()
-	medkit.configure("BuyMedkit", Vector3(1.4, 2, 1.2), c + Vector3(6.2, 1, 6.6),
-		"buy a MEDKIT (%d €)" % Team.PRICES["medkit"], func(peer): _buy(peer, "medkit"))
-	add_child(medkit)
-	var battery := InteractableScript.new()
-	battery.configure("BuyBattery", Vector3(1.4, 2, 1.2), c + Vector3(7.8, 1, 6.6),
-		"buy a BATTERY (%d €)" % Team.PRICES["battery"], func(peer): _buy(peer, "battery"))
-	add_child(battery)
-	_sign("MEDKIT %d €   BATTERY %d €" % [Team.PRICES["medkit"], Team.PRICES["battery"]], c + Vector3(7, 3.3, 6.4), 40)
-	_npc("character-male-f", c + Vector3(3, 0, -8), 0.5, "")
-	_npc("character-female-f", c + Vector3(-8, 0, -4), 2.0, "")
+	# Babka Hela: put mushrooms on her counter (or bring the basket) and she names and buys them.
+	_day_only.append(_npc_model(PP + "grandmother.glb", c + Vector3(-6, 0, 8.6), PI, 1.5))
+	_signpost("BABKA HELA\nputs a name to any mushroom\nbuys the good ones", Vector3(c.x - 8.5, 0, c.z + 6), 0.4, 34)
+	var babka := InteractableScript.new()
+	babka.configure("Babka", Vector3(3, 2, 1.2), c + Vector3(-6, 1, 6.6), "talk to Babka Hela (sell the basket)", _use_babka)
+	add_child(babka)
+	_counter = Area3D.new()
+	var counter_shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(3.2, 1.2, 1.6)
+	counter_shape.shape = box
+	_counter.add_child(counter_shape)
+	_counter.position = c + Vector3(-6, 1.2, 6.8)
+	add_child(_counter)
+
+	# Jano's shop: every item is a spot on his counter you press E at.
+	_day_only.append(_npc_model(K + "mini-characters/character-male-e.glb", c + Vector3(8, 0, 8.6), PI, 1.75))
+	_signpost("JANO'S POTRAVINY\neverything a forager needs\n(and some things they don't)", Vector3(c.x + 11.5, 0, c.z + 6), -0.4, 34)
+	for i in SHOP.size():
+		var item: String = SHOP[i][0]
+		var x := -2.2 + (i % 5) * 1.1
+		var row := 0.0 if i < 5 else 1.2
+		var spot := c + Vector3(8 + x, 1, 5.6 - row)
+		var buy := InteractableScript.new()
+		buy.configure("Buy_%s" % item, Vector3(1.0, 1.6, 0.8), spot,
+			"buy %s (%d €)" % [SHOP[i][1], Team.PRICES[item]], func(peer): _buy(peer, item))
+		add_child(buy)
+	for i in SPARE_BASKETS:
+		var spare := BasketScript.new()
+		spare.build(K + "mini-market/shopping-basket.glb")
+		spare.name = "SpareBasket%d" % i
+		spare.position = c + Vector3(5.5 + i * 0.9, 1.3, 4.6)
+		add_child(spare)
+		spare.hide_until_bought()
+		_spare_baskets.append(spare)
+
+	_day_only.append(_npc_model(K + "mini-characters/character-male-f.glb", c + Vector3(3, 0, -8), 0.5, 1.75))
+	_day_only.append(_npc_model(K + "mini-characters/character-female-f.glb", c + Vector3(-8, 0, -4), 2.0, 1.7))
+	_signpost("UNCLE FERO\nloans. no questions.\npayback every 3 days", Vector3(c.x + 14, 0, c.z - 12), -2.3, 34)
 
 
 func _build_casino() -> void:
 	var c := Terrain.place_centre("casino")
 	_solid(K + "city-kit-commercial/building-c.glb", Vector3(14, 12, 12), c + Vector3(0, 0, -8), 0.0)
 	_model(K + "city-kit-commercial/detail-awning-wide.glb", Vector3(10, 1.2, 3), c + Vector3(0, 3.6, -1.4), 0.0)
-	var neon := _sign("CASINO ROYALE\nZVOLEN", c + Vector3(0, 8.5, -1.8), 128)
+	var neon := _sign("CASINO ROYALE\nZVOLEN", c + Vector3(0, 8.5, -1.8), 128, 0.0)
 	neon.modulate = Color(1.0, 0.3, 0.8)
 	_night_lights.append(_light(c + Vector3(0, 5, 2), 2.5, 16.0, Color(1.0, 0.3, 0.8)))
 	_light(c + Vector3(0, 3, 1), 1.0, 10.0, Color(1.0, 0.5, 0.9))
@@ -471,19 +531,24 @@ func _build_casino() -> void:
 			"spin the slot machine (%d €)" % Team.PRICES["slot"], _use_slot)
 		add_child(slot)
 	_solid(K + "mini-arcade/vending-machine.glb", Vector3(1.2, 2.2, 1.0), c + Vector3(8, 0, -1), -0.3)
-	_npc("character-employee", c + Vector3(-7, 0, 1), 0.4, "BOUNCER\n(no refunds)", K + "mini-arcade/")
+	_npc_model(K + "mini-arcade/character-employee.glb", c + Vector3(-7, 0, 1), 0.4, 1.75)
 
 
 func _build_witch() -> void:
 	var c := Terrain.place_centre("witch")
 	var gy := K + "graveyard-kit/"
-	_sign("THE WITCH\nbrings back the dead", c + Vector3(0, 5, -8), 72)
+	_signpost("THE WITCH\nbring her the sick, the dead,\nand whatever she asks for", Vector3(c.x + 14, 0, c.z + 14), PI * 0.25, 40)
 	_solid(gy + "crypt.glb", Vector3(5, 5, 6), c + Vector3(0, 0, -10), 0.0)
-	for i in 9:
+	for i in 10:
 		var a := _rng.randf() * TAU
 		var r := _rng.randf_range(7, 15)
 		var model := gy + ("gravestone-round.glb" if i % 2 else "gravestone-cross.glb")
-		_solid(model, Vector3(0.9, 1.2, 0.3), c + Vector3(cos(a) * r, 0, sin(a) * r), _rng.randf() * TAU)
+		var yaw := _rng.randf() * TAU
+		var pos := c + Vector3(cos(a) * r, 0, sin(a) * r)
+		_solid(model, Vector3(0.9, 1.2, 0.3), pos, yaw)
+		var epitaph := _sign(EPITAPHS[i % EPITAPHS.size()], pos + Vector3(0, 0.75, 0) + Basis(Vector3.UP, yaw) * Vector3(0, 0, 0.17), 18, yaw)
+		epitaph.modulate = Color(0.15, 0.15, 0.15)
+		epitaph.outline_size = 0
 	for i in 6:
 		var a := i * TAU / 6.0 + 0.2
 		_solid(gy + "pine-crooked.glb", Vector3(3, 8, 3), c + Vector3(cos(a) * 17, 0, sin(a) * 17), a)
@@ -493,11 +558,14 @@ func _build_witch() -> void:
 	_model(gy + "fire-basket.glb", Vector3(0.7, 1.2, 0.7), c + Vector3(3, 0, -3), 0.0)
 	_model(gy + "candle-multiple.glb", Vector3(0.6, 0.5, 0.6), c + Vector3(1.4, 0, -0.6), 0.0)
 	_model(gy + "pumpkin-carved.glb", Vector3(0.6, 0.6, 0.6), c + Vector3(-1.6, 0, -0.8), 0.6)
-	_npc("character-keeper", c + Vector3(0, 0, -4), 0.0,
-		"THE WITCH\n2 Witch's fingers + 1 Glowcap\nin the basket = one dead friend back", gy)
+	var witch := _npc_model(PP + "witch.glb", c + Vector3(0, 0, -4), 0.0, 1.8)
+	for anim in witch.find_children("*", "AnimationPlayer", true, false):
+		if anim.has_animation("CharacterArmature|Idle"):
+			anim.get_animation("CharacterArmature|Idle").loop_mode = Animation.LOOP_LINEAR
+			anim.play("CharacterArmature|Idle")
 	var cauldron := InteractableScript.new()
 	cauldron.configure("Cauldron", Vector3(1.8, 1.2, 1.8), c + Vector3(0, 0.6, -2),
-		"ask the witch to revive your dead (basket nearby)", _use_cauldron)
+		"talk to the witch (bring the sick one, and what she asked for)", _use_cauldron)
 	add_child(cauldron)
 
 
@@ -519,13 +587,38 @@ func _build_ruin() -> void:
 	add_child(slot)
 
 
+## The scary places (built by their own scripts, if they exist yet).
+func _build_locations() -> void:
+	for entry in LOCATIONS:
+		if not ResourceLoader.exists(entry[1]):
+			continue
+		var script: Script = load(entry[1])
+		if script == null or not script.can_instantiate():
+			continue  # not finished yet
+		var loc: Node3D = script.new()
+		loc.name = (entry[0] as String).capitalize()
+		if entry[0] == "island":
+			var ic: Vector2 = Terrain.ISLAND[0]
+			loc.position = Vector3(ic.x, Terrain.height(ic.x, ic.y), ic.y)
+		else:
+			loc.position = Terrain.place_centre(entry[0])
+		add_child(loc)
+		loc.build()
+		_locations[entry[0]] = loc
+
+
+## Wooden signposts at the forks. No map, no minimap: read the signs or buy a compass.
 func _build_signs() -> void:
-	_sign("→ VILLAGE\n→ CASINO", Vector3(58, Terrain.height(58, 8) + 2.5, 8), 48)
-	_sign("CASINO ↓", Vector3(118, Terrain.height(118, 22) + 2.5, 22), 48)
-	_sign("→ the witch\n(don't)", Vector3(-38, Terrain.height(-38, -32) + 2.2, -32), 44)
-	_sign("→ old ruin", Vector3(-30, Terrain.height(-30, 50) + 2.2, 50), 44)
-	_sign("→ lake", Vector3(30, Terrain.height(30, -52) + 2.2, -52), 44)
-	_sign("CLIFF\ncareful", Vector3(-95, Terrain.height(-95, 60) + 2.5, 60), 44)
+	_signpost("← VILLAGE 380 m\n→ CHAPEL\n↓ OLD MINE", Vector3(14, 0, 12), -0.8)
+	_signpost("VILLAGE →\nCASINO ↘\nSANATÓRIUM ↑", Vector3(166, 0, 40), -1.6)
+	_signpost("SANATÓRIUM HÔRKA\nVSTUP ZAKÁZANÝ", Vector3(214, 0, 268), -2.6)
+	_signpost("CASINO →", Vector3(338, 0, 82), -1.2)
+	_signpost("→ the witch\n(don't)", Vector3(-12, 0, -222), 1.2)
+	_signpost("LAKE ↓\nno swimming. seriously.", Vector3(36, 0, -120), 0.4)
+	_signpost("CHAPEL & CRYPT →", Vector3(66, 0, -320), 2.4)
+	_signpost("BANSKÁ ŠTÔLŇA\nHODRUŠA →", Vector3(-332, 0, 140), -1.9)
+	_signpost("CLIFF\ncareful", Vector3(-226, 0, 30), 1.0)
+	_signpost("old ruin ↑", Vector3(-84, 0, 196), 0.6)
 
 
 func _build_mushrooms() -> void:
@@ -542,10 +635,10 @@ func _build_mushrooms() -> void:
 
 ## Somewhere in the woods, not on roads, not in the lake, not in town.
 func _mushroom_spot() -> Vector3:
-	for i in 50:
-		var x := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
-		var z := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
-		if Vector2(x, z).length() < 25.0 or not Terrain.is_clear(x, z, -2.0):
+	for i in 60:
+		var x := _rng.randf_range(-Terrain.SIZE * 0.39, Terrain.SIZE * 0.39)
+		var z := _rng.randf_range(-Terrain.SIZE * 0.39, Terrain.SIZE * 0.39)
+		if Vector2(x, z).length() < 30.0 or not Terrain.is_clear(x, z, -2.0):
 			continue
 		var h := Terrain.height(x, z)
 		if h > Terrain.WATER_Y + 0.5:
@@ -557,8 +650,7 @@ func _build_animals() -> void:
 	for i in BOAR_COUNT:
 		var boar := BoarScript.new()
 		boar.name = "Boar%d" % i
-		var home := _mushroom_spot()
-		boar.build(K + "cube-pets/animal-hog.glb", home, SEED + i)
+		boar.build(K + "cube-pets/animal-hog.glb", _mushroom_spot(), SEED + i)
 		add_child(boar)
 		_boars.append(boar)
 	var n := 0
@@ -566,11 +658,69 @@ func _build_animals() -> void:
 		for i in entry[1]:
 			n += 1
 			var size: Vector3 = entry[2]
-			var model := ModelFit.fit(K + "cube-pets/" + entry[0], size, PI)
+			var model := ModelFit.fit(K + "cube-pets/" + entry[0], size, 0.0)
 			model.position.y += size.y / 2.0
 			var critter := CritterScript.new()
 			critter.setup(model, _mushroom_spot(), entry[3], SEED + 100 + n)
 			add_child(critter)
+
+
+## Bear traps and mud pits, mostly near the paths where people actually walk.
+func _build_traps() -> void:
+	for i in TRAP_COUNT:
+		var at := _mushroom_spot()
+		if i % 2 == 0:
+			# Put every other one right next to a footpath.
+			var path: Array = Terrain.PATHS[i % Terrain.PATHS.size()]
+			var a: Vector2 = path[i % (path.size() - 1)]
+			var b: Vector2 = path[i % (path.size() - 1) + 1]
+			var p := a.lerp(b, _rng.randf()) + Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
+			at = Vector3(p.x, Terrain.height(p.x, p.y), p.y)
+		var trap := TrapScript.new()
+		trap.name = "Trap%d" % i
+		trap.build("bear trap" if i % 3 != 0 else "mud", Vector3(at.x, Terrain.height(at.x, at.z), at.z))
+		add_child(trap)
+
+
+## Every peer: a red flare rises and burns over the trees for a while.
+func _on_flare(pos: Vector3) -> void:
+	var flare := Node3D.new()
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.15, 0.1)
+	light.light_energy = 6.0
+	light.omni_range = 70.0
+	flare.add_child(light)
+	var ball := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.4
+	sphere.height = 0.8
+	ball.mesh = sphere
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1, 0.2, 0.1)
+	mat.emission_enabled = true
+	mat.emission = Color(1, 0.2, 0.1)
+	mat.emission_energy_multiplier = 8.0
+	ball.material_override = mat
+	flare.add_child(ball)
+	flare.position = pos + Vector3(0, 2, 0)
+	add_child(flare)
+	var tween := create_tween()
+	tween.tween_property(flare, "position:y", pos.y + 45.0, 3.0).set_ease(Tween.EASE_OUT)
+	tween.tween_property(flare, "position:y", pos.y + 30.0, 20.0)
+	tween.tween_callback(flare.queue_free)
+
+
+func _build_hunters() -> void:
+	for i in WOLF_COUNT:
+		var wolf := WolfScript.new()
+		wolf.name = "Wolf%d" % i
+		wolf.build(PP + "wolf.glb", _mushroom_spot(), SEED + 300 + i)
+		add_child(wolf)
+		_wolves.append(wolf)
+	_hag = HagScript.new()
+	_hag.name = "Hag"
+	_hag.build(PP + "hag.glb", SEED + 500)
+	add_child(_hag)
 
 
 # --- uses (host) ---------------------------------------------------------------------------
@@ -578,28 +728,86 @@ func _build_animals() -> void:
 
 func _buy(peer: int, item: String) -> void:
 	var price: int = Team.PRICES[item]
+	if _night:
+		Team.tell(peer, "The shop is closed. Jano is asleep. Come back in the morning.")
+		return
 	if Team.cash < price:
 		Team.tell(peer, "Jano: \"%d € or get out.\" (team cash: %d €)" % [price, Team.cash])
 		return
+	if item == "basket":
+		var spare = null
+		for b in _spare_baskets:
+			if b.for_sale:
+				spare = b
+				break
+		if spare == null:
+			Team.tell(peer, "Jano: \"Out of baskets. You lot keep losing them.\"")
+			return
+		spare.bring_out()
+	else:
+		Team.give(peer, item)
 	Team.add_cash(-price)
-	Team.give(peer, item)
-	Team.tell(peer, "Bought a %s. (H uses a medkit, T is the flashlight)" % item)
+	Sfx.play_all("buy", Terrain.place_centre("village") + Vector3(8, 1, 6))
+	var hint := {"medkit": " H uses it on whoever you look at.", "flare": " G fires it.", "whistle": " B blows it.",
+		"walkie": " Hold V to talk.", "compass": " It shows on screen now.", "wine": " G drinks it.",
+		"duck": " G squeezes it.", "lottery": " G scratches it."}
+	Team.tell(peer, "Bought a %s.%s" % [Team.ITEM_NAMES.get(item, item), hint.get(item, "")])
 
 
-func _use_buyer(peer: int) -> void:
-	var c := Terrain.place_centre("village") + Vector3(-6, 0, 6)
-	if _basket.global_position.distance_to(c) > SELL_RANGE:
-		Team.tell(peer, "Babka Hela: \"Bring me the basket, child.\"")
+## Every half second: Babka looks at what's on her counter. Mushrooms get a name and, if
+## they're any good, money. A basket on the counter gets the same treatment.
+func _check_counter() -> void:
+	if _night:
 		return
-	if _basket.contents.is_empty():
-		Team.tell(peer, "Babka Hela: \"It's empty. Are you on something?\"")
-		return
-	var result: Array = _basket.sell(Team.known)
+	for body in _counter.get_overlapping_bodies():
+		if body is MushroomScript and not body.removed and body.holder_id == 0:
+			_babka_judges(body)
+		elif body is BasketScript and not body.removed and body.holder_id == 0 and not body.contents.is_empty():
+			_babka_buys_basket(body)
+
+
+func _babka_judges(m: Node) -> void:
+	var kind: String = m.kind
+	var name := MushroomScript.name_of(kind)
+	Team.identify(kind)
+	if MushroomScript.sellable(kind):
+		var price: int = MushroomScript.price_of(kind)
+		m.remove_from_play()
+		Team.add_cash(price)
+		Sfx.play_all("cash", m.global_position)
+		Team.tell(0, "Babka Hela: \"%s, dear. %d €.\"" % [name, price])
+	elif MushroomScript.KINDS[kind][0] == MushroomScript.Effect.CURE:
+		if not m.get_meta("babka_saw", false):
+			m.set_meta("babka_saw", true)
+			Team.tell(0, "Babka Hela: \"%s?! Take that to the witch, child, and don't wave it around.\"" % name)
+	else:
+		m.remove_from_play()
+		Team.tell(0, "Babka Hela: \"That's a %s! Don't you dare eat that.\" She throws it in the bin." % name)
+
+
+func _babka_buys_basket(basket: Node) -> void:
+	for k in basket.contents:
+		Team.identify(k)
+	var result: Array = basket.sell(Team.known)
 	Team.add_cash(result[0])
-	var text := "Babka Hela bought %d mushrooms for %d €." % [result[1], result[0]]
+	if result[0] > 0:
+		Sfx.play_all("cash", basket.global_position)
+	var text := "Babka Hela went through the basket: %d mushrooms for %d €." % [result[1], result[0]]
 	if result[2] > 0:
-		text += " She won't touch the other %d (unknown or poisonous - taste first!)." % result[2]
+		text += " %d were rubbish or poison; she binned them." % result[2]
 	Team.tell(0, text)
+
+
+func _use_babka(peer: int) -> void:
+	if _night:
+		Team.tell(peer, "Babka Hela is asleep. Even grannies sleep.")
+		return
+	var c := Terrain.place_centre("village") + Vector3(-6, 0, 6)
+	for b in [_basket] + _spare_baskets:
+		if not b.removed and b.global_position.distance_to(c) < 7.0 and not b.contents.is_empty():
+			_babka_buys_basket(b)
+			return
+	Team.tell(peer, "Babka Hela: \"Put them on my counter, dear, one by one. Or bring the basket.\"")
 
 
 func _use_slot(peer: int) -> void:
@@ -608,10 +816,12 @@ func _use_slot(peer: int) -> void:
 		Team.tell(peer, "The bouncer looks at your wallet and laughs.")
 		return
 	Team.add_cash(-cost)
+	Sfx.play_all("slot_spin", Terrain.place_centre("casino"))
 	var roll := randi() % 100
 	var player_name: String = Team.players[peer]["name"]
 	if roll < 2:
 		Team.add_cash(500)
+		Sfx.play_all("slot_win", Terrain.place_centre("casino"))
 		Team.tell(0, "JACKPOT!!! %s won 500 €!" % player_name)
 	elif roll < 10:
 		Team.add_cash(100)
@@ -625,7 +835,7 @@ func _use_slot(peer: int) -> void:
 
 func _use_house_plot(peer: int) -> void:
 	if Team.house:
-		Team.tell(peer, "You already have a house. Boars can't get you at camp.")
+		Team.tell(peer, "You already have a house. Boars and wolves can't get you at camp.")
 		return
 	var price: int = Team.PRICES["house"]
 	if Team.cash < price:
@@ -634,28 +844,82 @@ func _use_house_plot(peer: int) -> void:
 	Team.add_cash(-price)
 	Team.house = true
 	Team.push_all()
-	Team.tell(0, "You built a HOUSE! Boars won't come into camp any more.")
+	Team.tell(0, "You built a HOUSE! Animals won't come into camp any more.")
 
 
+## The witch: bring her the sick one (alive and poisoned, or a body). She names what she needs,
+## and when it's in her cauldron (or the basket next to it) she fixes them.
 func _use_cauldron(peer: int) -> void:
 	var c := Terrain.place_centre("witch")
-	var dead := []
+	var sick := []
 	for p in Team.players:
-		if not Team.is_alive(p):
-			dead.append(p)
-	if dead.is_empty():
-		Team.tell(peer, "The witch: \"Nobody's dead, dearie. Yet.\"")
+		if not Team.is_alive(p) or Team.poison_left(p) > 0.0:
+			sick.append(p)
+	if sick.is_empty():
+		Team.tell(peer, "The witch: \"Nobody's sick, dearie. Yet. Hehehe.\"")
 		return
-	if _basket.global_position.distance_to(c) > 10.0:
-		Team.tell(peer, "The witch: \"Bring the basket. 2 Witch's fingers and a Glowcap.\"")
+	var here := []
+	for p in sick:
+		var at := _patient_position(p)
+		if at.distance_to(c) < 10.0:
+			here.append(p)
+	if here.is_empty():
+		Team.tell(peer, "The witch: \"Bring me the guy, dearie. I can't cure what I can't see.\"")
 		return
-	for k in WITCH_RECIPE:
-		if _basket.contents.count(k) < WITCH_RECIPE[k]:
-			Team.tell(peer, "The witch: \"Not enough. 2 Witch's fingers and a Glowcap, I said.\"")
-			return
-	for k in WITCH_RECIPE:
-		_basket.take(k, WITCH_RECIPE[k])
-	Team.revive(dead[0])
+	var patient: int = here[0]
+	var who: String = Team.players[patient]["name"]
+	if not _witch_orders.has(patient):
+		_witch_orders[patient] = _pick_ingredient()
+	var want: String = _witch_orders[patient]
+	if _take_from_cauldron(want, c):
+		_witch_orders.erase(patient)
+		Sfx.play_all("witch_cackle", c)
+		if Team.is_alive(patient):
+			Team.cure(patient)
+			Team.tell(0, "The witch stirs, %s drinks something awful, and the poison is gone." % who)
+		else:
+			Team.revive(patient)
+		return
+	Team.tell(0, "The witch: \"For %s I need %s. Put it in my cauldron. Hurry, dearie.\"" % [
+		who, _ingredient_text(want)])
+
+
+func _patient_position(peer_id: int) -> Vector3:
+	if not Team.is_alive(peer_id) and _bodies.has(peer_id):
+		return _bodies[peer_id].global_position
+	var p := _player(peer_id)
+	return p.global_position if p else Vector3.INF
+
+
+func _pick_ingredient() -> String:
+	var options := []
+	for entry in LOCATIONS:
+		if _locations.has(entry[0]):
+			options.append(entry[2])
+	if options.is_empty():
+		return "witch_finger"
+	return options[randi() % options.size()]
+
+
+func _ingredient_text(kind: String) -> String:
+	for entry in LOCATIONS:
+		if entry[2] == kind:
+			return entry[3]
+	return "a Witch's finger. They grow in the forest, if you know where to look"
+
+
+## Host: a mushroom of `kind` lying in the cauldron, or in a basket right next to it.
+func _take_from_cauldron(kind: String, c: Vector3) -> bool:
+	var bowl := c + Vector3(0, 0.5, -2)
+	for m in find_children("*", "", true, false):
+		if m is MushroomScript and not m.removed and m.kind == kind and m.holder_id == 0:
+			if m.global_position.distance_to(bowl) < 2.0:
+				m.remove_from_play()
+				return true
+	for b in [_basket] + _spare_baskets:
+		if not b.removed and b.global_position.distance_to(bowl) < 6.0 and b.take(kind, 1):
+			return true
+	return false
 
 
 # --- helpers --------------------------------------------------------------------------------
@@ -684,13 +948,54 @@ func _solid(path: String, size: Vector3, pos: Vector3, yaw: float) -> Node3D:
 	return body
 
 
-## A villager standing about, with a sign over their head.
-func _npc(character: String, pos: Vector3, yaw: float, text: String, folder := "") -> void:
-	var path := (folder if folder != "" else K + "mini-characters/") + character + ".glb"
-	var model := _model(path, Vector3(1.2, 1.75, 1.2), pos, yaw)
+## A wooden signpost at (x, z) on the ground, board facing `yaw`, text on both sides.
+func _signpost(text: String, at: Vector3, yaw: float, size := 44) -> void:
+	var ground := Terrain.height(at.x, at.z)
+	var post := StaticBody3D.new()
+	post.position = Vector3(at.x, ground, at.z)
+	post.rotation.y = yaw
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.2, 2.6, 0.2)
+	col.shape = shape
+	col.position.y = 1.3
+	post.add_child(col)
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.42, 0.3, 0.18)
+	var pole := MeshInstance3D.new()
+	var pole_mesh := BoxMesh.new()
+	pole_mesh.size = Vector3(0.14, 2.6, 0.14)
+	pole.mesh = pole_mesh
+	pole.position.y = 1.3
+	pole.material_override = wood
+	post.add_child(pole)
+	var lines := text.count("\n") + 1
+	var board := MeshInstance3D.new()
+	var board_mesh := BoxMesh.new()
+	board_mesh.size = Vector3(0.012 * size * maxf(1.0, text.length() / float(lines) / 2.2), 0.012 * size * lines + 0.2, 0.06)
+	board.mesh = board_mesh
+	board.position.y = 2.2
+	board.material_override = wood
+	post.add_child(board)
+	for side in [1.0, -1.0]:
+		var label := Label3D.new()
+		label.text = text
+		label.font_size = size
+		label.pixel_size = 0.005
+		label.modulate = Color(0.95, 0.9, 0.75)
+		label.outline_size = 0
+		label.position = Vector3(0, 2.2, 0.035 * side)
+		label.rotation.y = 0.0 if side > 0.0 else PI
+		post.add_child(label)
+	add_child(post)
+
+
+## A standing villager (no collision), playing its idle animation if it has one.
+func _npc_model(path: String, pos: Vector3, yaw: float, height: float) -> Node3D:
+	var model := _model(path, Vector3(height * 0.7, height, height * 0.7), pos, yaw)
 	for anim in model.find_children("*", "AnimationPlayer", true, false):
-		if anim.has_animation("idle"):
-			anim.get_animation("idle").loop_mode = Animation.LOOP_LINEAR
-			anim.play("idle")
-	if text != "":
-		_sign(text, pos + Vector3(0, 2.4, 0), 36)
+		for name in ["idle", "Idle"]:
+			if anim.has_animation(name):
+				anim.get_animation(name).loop_mode = Animation.LOOP_LINEAR
+				anim.play(name)
+	return model

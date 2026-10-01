@@ -7,8 +7,11 @@ const MushroomScript := preload("res://scripts/mushroom.gd")
 const SIZE := Vector3(0.7, 0.4, 0.5)
 
 var display_name := "Basket"
+var for_sale := false  # a spare still on Jano's shelf
 var contents: Array[String] = []  # mushroom kinds, host-authoritative, mirrored for the label
 var _label: Label3D
+var _catcher: Area3D
+var _scan := 0.0
 
 
 func build(model_path: String) -> void:
@@ -24,6 +27,7 @@ func build(model_path: String) -> void:
 	add_child(ModelFit.fit(model_path, SIZE))
 
 	var catcher := Area3D.new()
+	_catcher = catcher
 	var catch_shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(SIZE.x, 0.6, SIZE.z)
@@ -43,6 +47,20 @@ func build(model_path: String) -> void:
 	_refresh()
 
 
+## Host: also check what's sitting in the basket now and then. A mushroom that was still in
+## someone's hand when it entered never fires body_entered again once they let go.
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta)
+	if not multiplayer.is_server() or removed:
+		return
+	_scan += delta
+	if _scan < 0.25:
+		return
+	_scan = 0.0
+	for body in _catcher.get_overlapping_bodies():
+		_on_body_entered(body)
+
+
 func _on_body_entered(body: Node) -> void:
 	if not multiplayer.is_server() or removed:
 		return
@@ -58,13 +76,16 @@ func sell(known: Dictionary) -> Array:
 	var earned := 0
 	var sold := 0
 	var kept: Array[String] = []
+	var binned := 0
 	for k in contents:
 		if known.has(k) and MushroomScript.sellable(k):
 			earned += MushroomScript.price_of(k)
 			sold += 1
+		elif MushroomScript.KINDS[k][0] == MushroomScript.Effect.CURE:
+			kept.append(k)  # the witch's stuff stays in the basket
 		else:
-			kept.append(k)
-	var refused := kept.size()
+			binned += 1
+	var refused := binned
 	contents = kept
 	_mirror.rpc(contents)
 	return [earned, sold, refused]
@@ -105,12 +126,32 @@ func _refresh() -> void:
 		counts[k] = counts.get(k, 0) + 1
 	var lines := ["BASKET (%d)" % contents.size()]
 	for k in counts:
-		var tag := "" if Team.known.has(k) else " ?"
-		lines.append("%d× %s%s" % [counts[k], MushroomScript.name_of(k), tag])
+		lines.append("%d× %s" % [counts[k], MushroomScript.label_of(k)])
 	_label.text = "\n".join(lines)
 
 
 ## Stays where you left it between days (it only comes back if it fell off the world).
+## Spare baskets come out of hiding when they're bought (reset_to_home from the shop).
 func reset_to_home() -> void:
-	if position.y < -10.0:
+	if not for_sale and position.y < -10.0:
 		super.reset_to_home()
+
+
+## Host: Jano sold this spare basket; it appears on his counter.
+func bring_out() -> void:
+	for_sale = false
+	super.reset_to_home()
+
+
+## Every peer, at build: a spare basket waits out of sight in Jano's shop until someone buys it.
+func hide_until_bought() -> void:
+	for_sale = true
+	removed = true
+	_set_out(true)
+	position = Vector3(position.x, -100.0, position.z)
+
+
+## Host: the police take everything.
+func dump_all() -> void:
+	contents.clear()
+	_mirror.rpc(contents)

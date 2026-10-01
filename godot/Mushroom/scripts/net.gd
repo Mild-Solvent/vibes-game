@@ -99,6 +99,8 @@ func _setup_input() -> void:
 	_bind_keys("flashlight", [KEY_T])
 	_bind_keys("medkit", [KEY_H])
 	_bind_keys("journal", [KEY_J, KEY_TAB])
+	_bind_keys("use_item", [KEY_G])
+	_bind_keys("whistle", [KEY_B])
 	_bind_keys("spin", [KEY_R])
 	_bind_mouse("spin", MOUSE_BUTTON_WHEEL_UP)
 	_bind_mouse("spin_back", MOUSE_BUTTON_WHEEL_DOWN)

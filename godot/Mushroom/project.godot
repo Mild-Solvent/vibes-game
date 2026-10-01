@@ -28,7 +28,7 @@ driver/enable_input=true
 
 Net="*res://scripts/net.gd"
 Team="*res://scripts/team.gd"
-Noise="*res://scripts/noise.gd"
+Hearing="*res://scripts/noise.gd"
 Voice="*res://scripts/voice.gd"
 Sfx="*res://scripts/sfx.gd"
 Settings="*res://scripts/settings.gd"

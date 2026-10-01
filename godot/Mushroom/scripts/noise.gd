@@ -1,5 +1,5 @@
 extends Node
-## Autoload "Noise": the sounds monsters can hear. Anything loud reports itself here (voices,
+## Autoload "Hearing": the sounds monsters can hear. Anything loud reports itself here (voices,
 ## walkies, flares, whistles, dropped trays, car horns...). The host keeps a short memory of them;
 ## hunters (the hag, the Nurse, the Miner...) ask for the loudest recent one near them.
 ##

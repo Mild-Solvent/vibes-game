@@ -18,6 +18,10 @@ var seats := [0, 0, 0, 0]  # peer ids; the host decides and mirrors them through
 var _home := Transform3D.IDENTITY
 var _last_speed := 0.0
 var autodrive := false  # testing: full throttle, straight ahead
+var _flipped_for := 0.0
+var _lifters := {}  # host: peer id -> msec they last heaved
+var _cargo := {}  # host: prop -> its transform relative to the car (things on the roof rack)
+var _rack: Area3D
 
 
 func build(model_path: String) -> void:
@@ -60,6 +64,20 @@ func build(model_path: String) -> void:
 	max_contacts_reported = 4
 	body_entered.connect(_on_body_entered)
 
+	# Low centre of mass so it doesn't roll over in every corner (it still can if you're stupid).
+	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = Vector3(0, 0.3, 0)
+
+	# Roof rack / trunk: props dropped on the back half of the roof ride along.
+	_rack = Area3D.new()
+	var rack_shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.8, 1.2, 2.2)
+	rack_shape.shape = box
+	_rack.position = Vector3(0, 2.0, -0.9)
+	_rack.add_child(rack_shape)
+	add_child(_rack)
+
 
 func _ready() -> void:
 	_home = transform
@@ -83,15 +101,36 @@ func seat_position(index: int) -> Vector3:
 	return to_global(SEATS[index])
 
 
-func _physics_process(_delta: float) -> void:
+## Lying on its side or roof (judged from the synced rotation, so it works on every peer).
+func is_flipped() -> bool:
+	return global_basis.y.y < 0.35
+
+
+func _physics_process(delta: float) -> void:
+	if multiplayer.is_server():
+		_carry_cargo()
+		_flipped_for = _flipped_for + delta if is_flipped() else 0.0
+		if _flipped_for > 1.0 and Team.car_seats != [0, 0, 0, 0]:
+			# Everybody tumbles out of a flipped car.
+			Team.car_seats = [0, 0, 0, 0]
+			Team.push_all()
+			Team.tell(0, "The car flipped! Two of you have to lift it back up (E).")
+			Sfx.play_all("car_crash", global_position)
 	var mine := is_multiplayer_authority()
 	freeze = not mine
 	if not mine:
 		return
+	# Anti-roll: push back towards upright while it's only leaning; past ~60 degrees you're over.
+	var up := global_basis.y
+	if up.y > 0.5:
+		var axis := up.cross(Vector3.UP)
+		apply_torque(axis * mass * 14.0)
 	var driving: bool = seats[0] != 0 and seats[0] == multiplayer.get_unique_id()
 	if driving and (autodrive or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
 		var throttle := 1.0 if autodrive else Input.get_axis("move_back", "move_forward")
-		var steer := Input.get_axis("move_right", "move_left")
+		# Less steering at speed, but a hard turn flat out can still roll it.
+		var speed_factor := clampf(1.0 - linear_velocity.length() / 40.0, 0.4, 1.0)
+		var steer := Input.get_axis("move_right", "move_left") * speed_factor
 		var forward_speed := linear_velocity.dot(global_basis.z)
 		if throttle < 0.0 and forward_speed > 1.0:
 			brake = BRAKE_FORCE
@@ -136,6 +175,48 @@ func _driver_name() -> String:
 	return "nobody"
 
 
+## Heave a flipped car back onto its wheels: two different people within a couple of seconds.
+@rpc("any_peer", "call_local", "reliable")
+func request_lift() -> void:
+	if not multiplayer.is_server() or not is_flipped():
+		return
+	var peer := _sender()
+	if not Team.is_alive(peer):
+		return
+	var now := Time.get_ticks_msec()
+	_lifters[peer] = now
+	var helping := 0
+	for p in _lifters:
+		if now - _lifters[p] < 2500:
+			helping += 1
+	if helping < 2:
+		Team.tell(peer, "It's too heavy alone. Get someone else to lift too (E)!")
+		return
+	_lifters.clear()
+	var yaw := global_rotation.y
+	global_transform = Transform3D(Basis(Vector3.UP, yaw), global_position + Vector3(0, 1.4, 0))
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	Team.tell(0, "HEAVE... HO! The car is back on its wheels.")
+
+
+## Host: things on the roof rack stay put relative to the car; grab one and it's yours again.
+func _carry_cargo() -> void:
+	for prop in _cargo.keys():
+		if not is_instance_valid(prop) or prop.removed or prop.holder_id != 0:
+			if is_instance_valid(prop):
+				prop.carried_by = null
+			_cargo.erase(prop)
+			continue
+		prop.global_transform = global_transform * _cargo[prop]
+	for body in _rack.get_overlapping_bodies():
+		if body == self or _cargo.has(body) or not body.is_in_group("props"):
+			continue
+		if body.holder_id == 0 and not body.removed and body.linear_velocity.length() < 3.0:
+			_cargo[body] = global_transform.affine_inverse() * body.global_transform
+			body.carried_by = self
+
+
 ## Get in: drive if the wheel is free, else ride along.
 @rpc("any_peer", "call_local", "reliable")
 func request_enter() -> void:
@@ -145,6 +226,9 @@ func request_enter() -> void:
 	if seat_of(peer) >= 0 or not Team.is_alive(peer):
 		return
 	var new_seats: Array = Team.car_seats.duplicate()
+	if is_flipped():
+		Team.tell(peer, "It's upside down. Lift it first (two of you, E).")
+		return
 	var seat := new_seats.find(0)
 	if seat < 0:
 		Team.tell(peer, "The car is full.")

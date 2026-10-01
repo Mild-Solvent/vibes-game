@@ -178,12 +178,19 @@ func _tape_rect(zone: AABB, color: Color, y := 0.006) -> void:
 	_tape(Vector2(x1, z0), Vector2(x1, z1), color, y)
 
 
-func _sign(text: String, pos: Vector3, size := 64) -> Label3D:
+## A floating label. Billboarded by default (name tags); pass `yaw` to make it a fixed,
+## two-sided sign facing that way instead.
+func _sign(text: String, pos: Vector3, size := 64, yaw := INF) -> Label3D:
 	var label := Label3D.new()
 	label.text = text
 	label.font_size = size
 	label.pixel_size = 0.005
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.outline_size = 10
+	if yaw == INF:
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	else:
+		label.double_sided = true
+		label.rotation.y = yaw
 	label.position = pos
 	add_child(label)
 	return label

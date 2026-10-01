@@ -2,53 +2,90 @@ extends Node
 ## Autoload "Team": the four jobless friends' shared state. The host owns it and mirrors every
 ## change to everyone with _sync(); clients ask for things through request_* RPCs.
 ##
-## Per player: a status (fine / tripping / passed out / poisoned / dead) with time left, and an
-## inventory (medkits, batteries). Shared: cash, which mushroom species are identified, the house.
+## Per player: separate timers for poison, tripping and being passed out (so one never cures the
+## other), dead or alive, and an inventory. Shared: cash, batteries, which mushroom species Babka
+## Hela has named for you, the house, the car seats, Uncle Fero's debt, and the police.
+##
+## Mushrooms don't hit straight away: tasting one queues its effect, which kicks in after a while.
 
 signal changed
 signal died(peer_id: int, reason: String)
 signal revived(peer_id: int)
 signal toast(text: String)
 signal battery_installed
+signal game_over(reason: String)
+signal flare_fired(pos: Vector3)
 
 enum Status { OK, TRIPPING, PASSED_OUT, POISONED, DEAD }
 
-const PRICES := {"medkit": 40, "battery": 8, "house": 300, "slot": 20, "old_slot": 5}
-const POISON_SECONDS := 90.0
-const TRIP_SECONDS := 30.0
-const PASS_OUT_SECONDS := 18.0
+const PRICES := {
+	"medkit": 40, "battery": 8, "house": 300, "slot": 20, "old_slot": 5, "basket": 15, "compass": 25,
+	"flare": 12, "whistle": 6, "walkie": 30, "wine": 4, "duck": 3, "lottery": 2,
+}
+const ITEM_NAMES := {
+	"medkit": "medkit", "battery": "battery", "basket": "basket", "compass": "compass", "flare": "flare",
+	"whistle": "whistle", "walkie": "walkie-talkie", "wine": "bottle of cheap wine", "duck": "rubber duck",
+	"lottery": "lottery ticket",
+}
+const POISON_SECONDS := 240.0  # once it kicks in: get a medkit or get to the witch
+const TRIP_SECONDS := 40.0
+const PASS_OUT_SECONDS := 25.0
 const OVERDOSE_TRIPS := 3  # this many trips inside OVERDOSE_WINDOW and you pass out
-const OVERDOSE_WINDOW := 90.0
+const OVERDOSE_WINDOW := 120.0
+const QUOTA_EVERY := 3  # Uncle Fero comes every 3 days
+const QUOTAS := [150, 350, 600, 1000, 1500, 2200]
+const POLICE_SECONDS := 120.0
 
 var cash := 0
 var day := 1
-var known := {}  # mushroom kind -> true once somebody tasted one
+var batteries := 2  # shared by everyone
+var known := {}  # mushroom kind -> true once Babka Hela named it
 var house := false
 var car_seats := [0, 0, 0, 0]  # peer ids in the car, driver first
-## peer id -> {"name", "status", "left", "medkit", "battery"}
+var quota_index := 0
+var police_left := -1.0  # counting down while a friend is missing (-1 = nobody missing)
+var missing_peer := 0
+## peer id -> {"name", "status", "left", "poison", "trip", "out", "dead", items...}
 var players := {}
 
 var _recent_trips := {}  # host: peer id -> Array of msec timestamps
+var _pending: Array[Dictionary] = []  # host: {"peer", "effect", "at", "name"}
 
 
 func _process(delta: float) -> void:
-	var expired := []
+	var dirty := false
 	for peer in players:
 		var p: Dictionary = players[peer]
-		if p["left"] > 0.0:
-			p["left"] = maxf(p["left"] - delta, 0.0)
-			if p["left"] == 0.0:
-				expired.append(peer)
+		for timer in ["poison", "trip", "out"]:
+			if p[timer] > 0.0:
+				p[timer] = maxf(p[timer] - delta, 0.0)
+				if p[timer] == 0.0:
+					dirty = true
+		_derive(p)
+	if police_left > 0.0:
+		police_left = maxf(police_left - delta, 0.0)
 	if not multiplayer.is_server():
 		return
-	for peer in expired:
-		match players[peer]["status"]:
-			Status.TRIPPING:
-				set_status(peer, Status.OK)
-			Status.PASSED_OUT:
-				set_status(peer, Status.TRIPPING, TRIP_SECONDS)
-			Status.POISONED:
-				kill(peer, "the poison")
+	var now := Time.get_ticks_msec() / 1000.0
+	var due := _pending.filter(func(e): return e["at"] <= now)
+	if not due.is_empty():
+		_pending = _pending.filter(func(e): return e["at"] > now)
+		for e in due:
+			_kick_in(e["peer"], e["effect"], e["name"])
+	for peer in players:
+		var p: Dictionary = players[peer]
+		if p["dead"]:
+			continue
+		if p["poison"] == 0.0 and p.get("was_poisoned", false):
+			p["was_poisoned"] = false
+			kill(peer, "mushroom poisoning")
+		elif p["out"] == 0.0 and p.get("was_out", false):
+			p["was_out"] = false
+			p["dragged_by"] = 0
+			p["trip"] = maxf(p["trip"], 15.0)  # you wake up still seeing things
+			dirty = true
+	if dirty:
+		_push()
 
 
 # --- reading (any peer) -----------------------------------------------------------
@@ -62,12 +99,31 @@ func time_left(peer_id: int) -> float:
 	return players[peer_id]["left"] if players.has(peer_id) else 0.0
 
 
+func poison_left(peer_id: int) -> float:
+	return players[peer_id]["poison"] if players.has(peer_id) else 0.0
+
+
+func is_tripping(peer_id: int) -> bool:
+	return players.has(peer_id) and (players[peer_id]["trip"] > 0.0 or players[peer_id]["out"] > 0.0)
+
+
 func count(peer_id: int, item: String) -> int:
+	if item == "battery":
+		return batteries
 	return players[peer_id].get(item, 0) if players.has(peer_id) else 0
 
 
 func is_alive(peer_id: int) -> bool:
 	return status_of(peer_id) != Status.DEAD
+
+
+func quota_amount() -> int:
+	return QUOTAS[mini(quota_index, QUOTAS.size() - 1)]
+
+
+## The day Uncle Fero comes for the money (he collects at the end of that day).
+func quota_day() -> int:
+	return (quota_index + 1) * QUOTA_EVERY
 
 
 # --- host API ---------------------------------------------------------------------
@@ -76,16 +132,23 @@ func is_alive(peer_id: int) -> bool:
 func reset() -> void:
 	cash = 0
 	day = 1
+	batteries = 2
 	known.clear()
 	house = false
 	car_seats = [0, 0, 0, 0]
-	players.clear()
+	quota_index = 0
+	police_left = -1.0
+	missing_peer = 0
+	for peer in players:
+		players[peer] = _fresh(players[peer]["name"])
 	_recent_trips.clear()
+	_pending.clear()
+	_push()
 
 
 func add_player(peer_id: int, player_name: String) -> void:
 	if not players.has(peer_id):
-		players[peer_id] = {"name": player_name, "status": Status.OK, "left": 0.0, "medkit": 0, "battery": 1}
+		players[peer_id] = _fresh(player_name)
 	_push()
 
 
@@ -94,46 +157,73 @@ func remove_player(peer_id: int) -> void:
 	_push()
 
 
+## Old-style API: put one status on (OK clears everything but death).
 func set_status(peer_id: int, status: int, seconds := 0.0) -> void:
 	if not players.has(peer_id):
 		return
-	players[peer_id]["status"] = status
-	players[peer_id]["left"] = seconds
+	var p: Dictionary = players[peer_id]
+	match status:
+		Status.OK:
+			p["poison"] = 0.0
+			p["trip"] = 0.0
+			p["out"] = 0.0
+			p["was_poisoned"] = false
+			p["was_out"] = false
+			p["dead"] = false
+		Status.TRIPPING:
+			p["trip"] = maxf(p["trip"], seconds)
+		Status.PASSED_OUT:
+			p["out"] = maxf(p["out"], seconds)
+			p["was_out"] = true
+		Status.POISONED:
+			p["poison"] = seconds
+			p["was_poisoned"] = true
+		Status.DEAD:
+			p["dead"] = true
+	_derive(p)
 	_push()
 
 
-## Host: a mushroom took effect on `peer_id`. Returns the toast for the taster.
+## Host: somebody ate a mushroom. Nothing happens yet; the effect is queued and kicks in later.
+## The taster only gets a vague first impression.
 func apply_mushroom(peer_id: int, effect: int, display_name: String) -> String:
 	const Mushroom := preload("res://scripts/mushroom.gd")
 	if not is_alive(peer_id):
 		return ""
+	var delay := 0.0
 	match effect:
-		Mushroom.Effect.FOOD:
-			return "%s. Tasty, and you're fine. Villagers will buy these." % display_name
 		Mushroom.Effect.TRIP, Mushroom.Effect.WITCH:
-			if _count_trip(peer_id) >= OVERDOSE_TRIPS:
-				set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
-				return "One %s too many. Lights out." % display_name
-			if status_of(peer_id) != Status.POISONED:
-				set_status(peer_id, Status.TRIPPING, TRIP_SECONDS)
-			return "%s. Oh. Oh no. The trees are breathing." % display_name
-		Mushroom.Effect.CURE:
-			return "%s. Tastes like a basement. You should have given that to the witch." % display_name
+			delay = randf_range(18.0, 35.0)
 		Mushroom.Effect.STRONG:
-			set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
-			return "%s. You see the face of God, then the ground." % display_name
+			delay = randf_range(25.0, 40.0)
 		Mushroom.Effect.POISON:
-			set_status(peer_id, Status.POISONED, POISON_SECONDS)
-			return "%s. Your stomach says no. Get a MEDKIT in %d s or you're dead." % [
-				display_name, int(POISON_SECONDS)
-			]
-	return ""
+			delay = randf_range(35.0, 60.0)
+	if delay > 0.0:
+		_pending.append({"peer": peer_id, "effect": effect, "at": Time.get_ticks_msec() / 1000.0 + delay,
+			"name": display_name})
+	return ["Chewy. Tastes like... mushroom. You feel fine. For now.",
+		"Earthy, a bit bitter. Probably fine?", "Crunchy. Your tongue tingles slightly.",
+		"Tastes like the forest floor. Delicious."][randi() % 4]
+
+
+## Host: something nasty you drank or ate catches up with you later.
+func queue_gag(peer_id: int, gag: String, delay: float) -> void:
+	_pending.append({"peer": peer_id, "effect": -1, "at": Time.get_ticks_msec() / 1000.0 + delay, "name": gag})
 
 
 func kill(peer_id: int, reason: String) -> void:
 	if not players.has(peer_id) or not is_alive(peer_id):
 		return
-	set_status(peer_id, Status.DEAD)
+	var p: Dictionary = players[peer_id]
+	p["dead"] = true
+	p["poison"] = 0.0
+	p["trip"] = 0.0
+	p["out"] = 0.0
+	p["was_poisoned"] = false
+	p["was_out"] = false
+	_pending = _pending.filter(func(e): return e["peer"] != peer_id)
+	_derive(p)
+	_push()
 	_died.rpc(peer_id, reason)
 
 
@@ -143,21 +233,40 @@ func revive(peer_id: int) -> void:
 		_revived.rpc(peer_id)
 
 
+## Host: cure poison and wake someone up (medkit, the witch).
+func cure(peer_id: int) -> void:
+	if not players.has(peer_id):
+		return
+	var p: Dictionary = players[peer_id]
+	p["poison"] = 0.0
+	p["out"] = 0.0
+	p["was_poisoned"] = false
+	p["was_out"] = false
+	_pending = _pending.filter(func(e): return e["peer"] != peer_id or e["effect"] < 0)
+	_derive(p)
+	_push()
+
+
 func add_cash(amount: int) -> void:
 	cash += amount
 	_push()
 
 
 func give(peer_id: int, item: String, amount := 1) -> void:
-	if players.has(peer_id):
+	if item == "battery":
+		batteries += amount
+	elif players.has(peer_id):
 		players[peer_id][item] = players[peer_id].get(item, 0) + amount
-		_push()
+	_push()
 
 
 func take(peer_id: int, item: String) -> bool:
 	if count(peer_id, item) <= 0:
 		return false
-	players[peer_id][item] -= 1
+	if item == "battery":
+		batteries -= 1
+	else:
+		players[peer_id][item] -= 1
 	_push()
 	return true
 
@@ -168,13 +277,51 @@ func identify(kind: String) -> void:
 		_push()
 
 
+## Host: the end of a day. Uncle Fero collects every QUOTA_EVERY days; can't pay, run's over.
 func next_day() -> void:
+	if day % QUOTA_EVERY == 0:
+		var amount := quota_amount()
+		if cash >= amount:
+			cash -= amount
+			quota_index += 1
+			tell(0, "Uncle Fero took his %d €. \"Same time in %d days, boys. It'll be %d.\"" % [
+				amount, QUOTA_EVERY, quota_amount()])
+		else:
+			var reason := "Uncle Fero came for %d € and you had %d €. He took the car, the tents and a kidney." % [
+				amount, cash]
+			tell(0, reason)
+			_game_over.rpc(reason)
+			reset()
+			return
 	day += 1
+	_push()
+
+
+## Host: caught in a bear trap / sunk in mud ("" frees). Only a friend can get you out.
+func set_stuck(peer_id: int, what: String) -> void:
+	if players.has(peer_id):
+		players[peer_id]["stuck"] = what
+		_push()
+
+
+func stuck_in(peer_id: int) -> String:
+	return players[peer_id].get("stuck", "") if players.has(peer_id) else ""
+
+
+func dragged_by(peer_id: int) -> int:
+	return players[peer_id].get("dragged_by", 0) if players.has(peer_id) else 0
+
+
+func set_police(seconds_left: float, peer_id: int) -> void:
+	police_left = seconds_left
+	missing_peer = peer_id
 	_push()
 
 
 ## Host: show a toast to one player (or everyone with peer_id 0).
 func tell(peer_id: int, text: String) -> void:
+	if text.is_empty():
+		return
 	if peer_id == 0:
 		_toast.rpc(text)
 	elif peer_id == multiplayer.get_unique_id():
@@ -204,7 +351,7 @@ func request_buy(item: String) -> void:
 		return
 	cash -= price
 	give(peer, item)
-	tell(peer, "Bought a %s for %d €." % [item, price])
+	tell(peer, "Bought a %s for %d €." % [ITEM_NAMES.get(item, item), price])
 
 
 ## Use a medkit on `target` (0 = yourself). Cures poison and wakes people up.
@@ -217,34 +364,64 @@ func request_medkit(target: int) -> void:
 		return
 	if target == 0 or not players.has(target):
 		target = peer
-	var status := status_of(target)
-	if status == Status.DEAD:
+	var p: Dictionary = players[target]
+	if p["dead"]:
 		tell(peer, "Too late for a medkit. Maybe the witch can help...")
 		return
-	if status == Status.OK or status == Status.TRIPPING:
-		tell(peer, "%s doesn't need a medkit." % players[target]["name"])
+	if p["poison"] <= 0.0 and p["out"] <= 0.0 and not _has_pending_poison(target):
+		tell(peer, "%s doesn't need a medkit." % p["name"])
 		return
 	if not take(peer, "medkit"):
-		tell(peer, "You have no medkit. The village shop sells them.")
+		tell(peer, "You have no medkit. Jano's shop in the village sells them.")
 		return
-	set_status(target, Status.OK)
-	tell(peer, "Patched up %s." % players[target]["name"])
+	cure(target)
+	tell(peer, "Patched up %s." % p["name"])
 	if target != peer:
 		tell(target, "%s saved your life with a medkit." % players[peer]["name"])
 
 
-## The flashlight ran dry and wants a fresh battery.
+## The flashlight ran dry and wants a fresh battery from the shared stash.
 @rpc("any_peer", "call_local", "reliable")
 func request_battery() -> void:
 	if not multiplayer.is_server():
 		return
 	var peer := _sender()
 	if not take(peer, "battery"):
+		tell(peer, "No batteries left. Somebody buy some at Jano's!")
 		return
 	if peer == multiplayer.get_unique_id():
 		_battery_ok()
 	else:
 		_battery_ok.rpc_id(peer)
+
+
+## Pull a stuck friend out of a trap or the mud (you can't do it yourself).
+@rpc("any_peer", "call_local", "reliable")
+func request_free(target: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer := _sender()
+	if peer == target or not is_alive(peer) or stuck_in(target) == "":
+		return
+	var what := stuck_in(target)
+	set_stuck(target, "")
+	tell(0, "%s pulled %s out of the %s." % [players[peer]["name"], players[target]["name"], what])
+
+
+## Grab a passed-out friend by the collar and drag them along (E again lets go).
+@rpc("any_peer", "call_local", "reliable")
+func request_drag(target: int) -> void:
+	if not multiplayer.is_server() or not players.has(target):
+		return
+	var peer := _sender()
+	if peer == target or not is_alive(peer):
+		return
+	var p: Dictionary = players[target]
+	if p["dragged_by"] == peer:
+		p["dragged_by"] = 0
+	elif p["out"] > 0.0:
+		p["dragged_by"] = peer
+	_push()
 
 
 ## Whoever simulates a car or an animal reports who it killed.
@@ -261,6 +438,40 @@ func request_die(reason: String) -> void:
 		kill(_sender(), reason)
 
 
+## Use a one-shot item from your pockets (wine, duck, lottery ticket, flare, whistle).
+@rpc("any_peer", "call_local", "reliable")
+func request_use_item(item: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer := _sender()
+	if not is_alive(peer) or not take(peer, item):
+		return
+	var who: String = players[peer]["name"]
+	var pos := _player_pos(peer)
+	match item:
+		"flare":
+			Hearing.emit(pos, 120.0, peer)
+			Sfx.play_all("flare", pos)
+			_flare.rpc(pos)
+			tell(0, "%s fired a FLARE! Everyone can see it. Everything can hear it." % who)
+		"whistle":
+			give(peer, "whistle")  # you keep the whistle
+			Hearing.emit(pos, 80.0, peer)
+			Sfx.play_all("whistle", pos)
+		"wine":
+			set_status(peer, Status.TRIPPING, 20.0)
+			tell(peer, "Cheap wine. The world goes soft and wobbly.")
+		"duck":
+			tell(0, "%s squeezes a rubber duck. *squeak*. Morale +1." % who)
+			give(peer, "duck")  # you keep the duck
+		"lottery":
+			if randi() % 20 == 0:
+				add_cash(100)
+				tell(0, "%s scratched a winning lottery ticket! +100 €" % who)
+			else:
+				tell(peer, "Not a winner. Of course.")
+
+
 # --- mirroring ------------------------------------------------------------------------
 
 
@@ -273,7 +484,11 @@ func _push() -> void:
 	if not multiplayer.is_server():
 		return
 	if Net.is_online():
-		_sync.rpc({"cash": cash, "day": day, "known": known, "house": house, "players": players, "car": car_seats})
+		_sync.rpc({
+			"cash": cash, "day": day, "batteries": batteries, "known": known, "house": house,
+			"players": players, "car": car_seats, "quota": quota_index, "police": police_left,
+			"missing": missing_peer,
+		})
 	changed.emit()
 
 
@@ -281,10 +496,14 @@ func _push() -> void:
 func _sync(state: Dictionary) -> void:
 	cash = state["cash"]
 	day = state["day"]
+	batteries = state["batteries"]
 	known = state["known"]
 	house = state["house"]
 	players = state["players"]
 	car_seats = state["car"]
+	quota_index = state["quota"]
+	police_left = state["police"]
+	missing_peer = state["missing"]
 	changed.emit()
 
 
@@ -301,6 +520,92 @@ func _revived(peer_id: int) -> void:
 @rpc("authority", "call_local", "reliable")
 func _toast(text: String) -> void:
 	toast.emit(text)
+
+
+@rpc("authority", "call_local", "reliable")
+func _flare(pos: Vector3) -> void:
+	flare_fired.emit(pos)
+
+
+@rpc("authority", "call_local", "reliable")
+func _game_over(reason: String) -> void:
+	game_over.emit(reason)
+
+
+## Host: a queued effect kicks in now.
+func _kick_in(peer_id: int, effect: int, display_name: String) -> void:
+	const Mushroom := preload("res://scripts/mushroom.gd")
+	if not players.has(peer_id) or not is_alive(peer_id):
+		return
+	if effect < 0:
+		match display_name:
+			"pond_water":
+				tell(peer_id, "Your stomach makes a noise like a drain. You throw up everywhere. Now you're STARVING.")
+				Sfx.play_all("vomit", _player_pos(peer_id))
+				_gag.rpc(peer_id, "vomit")
+		return
+	match effect:
+		Mushroom.Effect.TRIP, Mushroom.Effect.WITCH:
+			if _count_trip(peer_id) >= OVERDOSE_TRIPS:
+				set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
+				tell(peer_id, "That mushroom from earlier... and the one before... Lights out.")
+			else:
+				set_status(peer_id, Status.TRIPPING, TRIP_SECONDS)
+				tell(peer_id, "Oh. Oh no. The trees are breathing. That mushroom from earlier...")
+		Mushroom.Effect.STRONG:
+			set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
+			set_status(peer_id, Status.TRIPPING, PASS_OUT_SECONDS + 20.0)
+			tell(peer_id, "You see the face of God. Then the ground.")
+		Mushroom.Effect.POISON:
+			set_status(peer_id, Status.POISONED, POISON_SECONDS)
+			tell(peer_id, "Cramps. Cold sweat. That mushroom was POISON. Medkit or the witch, %d s." % int(POISON_SECONDS))
+			tell(0, "%s looks green. Really green." % players[peer_id]["name"])
+
+
+## Every peer: a gag effect on one player's screen (vomit...). The HUD listens.
+@rpc("authority", "call_local", "reliable")
+func _gag(peer_id: int, gag: String) -> void:
+	if peer_id == multiplayer.get_unique_id():
+		get_tree().call_group("hud", "play_gag", gag)
+
+
+func _player_pos(peer_id: int) -> Vector3:
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.peer_id == peer_id:
+			return p.global_position
+	return Vector3.INF
+
+
+func _has_pending_poison(peer_id: int) -> bool:
+	const Mushroom := preload("res://scripts/mushroom.gd")
+	for e in _pending:
+		if e["peer"] == peer_id and e["effect"] == Mushroom.Effect.POISON:
+			return true
+	return false
+
+
+func _fresh(player_name: String) -> Dictionary:
+	return {"name": player_name, "status": Status.OK, "left": 0.0, "poison": 0.0, "trip": 0.0, "out": 0.0,
+		"dead": false, "medkit": 0, "was_poisoned": false, "was_out": false, "stuck": "", "dragged_by": 0}
+
+
+## The status to show: the worst thing going on, and its time left.
+func _derive(p: Dictionary) -> void:
+	if p["dead"]:
+		p["status"] = Status.DEAD
+		p["left"] = 0.0
+	elif p["out"] > 0.0:
+		p["status"] = Status.PASSED_OUT
+		p["left"] = p["out"]
+	elif p["poison"] > 0.0:
+		p["status"] = Status.POISONED
+		p["left"] = p["poison"]
+	elif p["trip"] > 0.0:
+		p["status"] = Status.TRIPPING
+		p["left"] = p["trip"]
+	else:
+		p["status"] = Status.OK
+		p["left"] = 0.0
 
 
 func _count_trip(peer_id: int) -> int:

@@ -83,6 +83,40 @@ static func name_of(mushroom_kind: String) -> String:
 	return KINDS[mushroom_kind][7]
 
 
+## What you can tell just by looking: "a tall cone-capped mushroom, greenish". Names are Babka's job.
+static func describe(mushroom_kind: String) -> String:
+	var k: Array = KINDS[mushroom_kind]
+	var shape: String = {"dome": "round-capped", "flat": "flat-capped", "tall": "pointy", "ball": "ball-shaped",
+		"finger": "finger-shaped"}[k[9]]
+	var size := "small" if k[4] < 0.09 else ("big" if k[4] > 0.15 else "")
+	var glow := ", glowing" if k[8] else ""
+	return ("a %s %s mushroom, %s%s" % [size, shape, _colour_word(k[2]), glow]).replace("  ", " ")
+
+
+## The name if Babka Hela has told you, else a description.
+static func label_of(mushroom_kind: String) -> String:
+	return name_of(mushroom_kind) if Team.known.has(mushroom_kind) else describe(mushroom_kind)
+
+
+static func _colour_word(c: Color) -> String:
+	if c.s < 0.25:
+		return "white" if c.v > 0.8 else ("grey" if c.v > 0.4 else "black")
+	var h := c.h * 360.0
+	if h < 20.0 or h > 340.0:
+		return "red"
+	if h < 45.0:
+		return "brown" if c.v < 0.6 else "orange"
+	if h < 70.0:
+		return "yellow"
+	if h < 160.0:
+		return "greenish"
+	if h < 200.0:
+		return "teal"
+	if h < 260.0:
+		return "blue"
+	return "purple" if h < 300.0 else "pink"
+
+
 ## Villagers buy food and the fun ones, but only once the species is identified.
 static func sellable(mushroom_kind: String) -> bool:
 	var e: int = KINDS[mushroom_kind][0]
@@ -165,7 +199,7 @@ func request_taste() -> void:
 	if sender != holder_id or not Team.is_alive(sender):
 		return
 	remove_from_play()
-	Team.identify(kind)
+	Sfx.play_all("eat", global_position)
 	Team.tell(sender, Team.apply_mushroom(sender, effect, display_name))
 	tasted.emit(sender)
 

@@ -144,6 +144,7 @@ func _on_director_changed() -> void:
 	var secs := maxi(int(ceil(director.time_left)), 0)
 	var clock := "%d:%02d" % [secs / 60, secs % 60]
 	level.apply_state(director.phase, director.event, director.sub, director.time_left)
+	hud.set_phase(director.phase)
 	hud.update_state(
 		level.phase_text(director.phase, clock, director.score, director.sub),
 		level.score_name(),

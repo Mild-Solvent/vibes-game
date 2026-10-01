@@ -12,6 +12,7 @@ var _home := Transform3D.IDENTITY
 ## Host: how the holder has turned the prop in their hands (yaw, pitch), see set_spin().
 var hold_spin := Vector2.ZERO
 var _last_speed := 0.0
+var carried_by: Node3D = null  # host: the car whose roof rack this rides on
 
 
 func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mass: float) -> void:
@@ -62,6 +63,8 @@ func reset_to_home() -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	transform = _home
+	if Net.is_online():
+		_set_out.rpc(false)
 
 
 ## Host only: take the prop out of play (it stays in the tree so node paths keep matching).
@@ -70,10 +73,23 @@ func remove_from_play() -> void:
 	removed = true
 	linear_velocity = Vector3.ZERO
 	position = Vector3(position.x, -100.0, position.z)
+	if Net.is_online():
+		_set_out.rpc(true)
+
+
+## Every peer: hide a prop that's out of play (eaten, sold, packed in the basket) right away,
+## instead of waiting for its position to sync.
+@rpc("authority", "call_local", "reliable")
+func _set_out(out: bool) -> void:
+	removed = out
+	visible = not out
+	for child in get_children():
+		if child is CollisionShape3D:
+			child.set_deferred("disabled", out)
 
 
 func _physics_process(_delta: float) -> void:
-	var simulating := multiplayer.is_server() and not removed
+	var simulating := multiplayer.is_server() and not removed and carried_by == null
 	if freeze == simulating:
 		freeze = not simulating
 	if not simulating:

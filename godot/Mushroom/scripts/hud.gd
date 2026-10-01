@@ -52,6 +52,16 @@ var _intro_label: Label
 var _intro_index := -1
 var _intro_left := 0.0
 var _toast_left := 0.0
+var _gag_left := 0.0
+var _journal_open := false
+var _compass: Label
+var _duel: ProgressBar
+var _duel_label: Label
+var _reel: ColorRect
+var _reel_grid: GridContainer
+var _reel_title: Label
+var _highlights: Array[Dictionary] = []
+var _phase := -1
 var intro_enabled := true
 
 
@@ -67,6 +77,8 @@ func _process(delta: float) -> void:
 	if _toast_left > 0.0:
 		_toast_left -= delta
 		_toast.visible = _toast_left > 0.0
+	if _gag_left > 0.0:
+		_gag_left -= delta
 	if _intro_index >= 0:
 		_intro_left -= delta
 		if _intro_left <= 0.0:
@@ -80,7 +92,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_next_intro()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("journal"):
-		_guide.visible = not _guide.visible
+		var me := _local_player()
+		if me and me.holding_guide():
+			_journal_open = not _journal_open
+		else:
+			show_toast("Only whoever holds the field guide can read it. It's on the chest at camp.")
 
 
 func set_levels(titles: Array) -> void:
@@ -166,31 +182,148 @@ func _update_game() -> void:
 	var strength := 0.0
 	var dark := 0.0
 	var tint := Color.WHITE
+	var lines: Array[String] = []
+	if Team.is_tripping(id):
+		strength = clampf(maxf(Team.players[id]["trip"], Team.players[id]["out"]) / 5.0, 0.0, 1.0)
 	match status:
 		Team.Status.TRIPPING:
-			strength = clampf(Team.time_left(id) / 5.0, 0.0, 1.0)
-			_status_label.text = "TRIPPING (%d s)" % left
+			lines.append("TRIPPING (%d s)" % left)
 		Team.Status.PASSED_OUT:
-			strength = 1.0
 			dark = 0.9
-			_status_label.text = "PASSED OUT (%d s)... the colours, man" % left
-		Team.Status.POISONED:
-			tint = Color(0.75, 1.0, 0.7)
-			dark = 0.5 * (1.0 - Team.time_left(id) / Team.POISON_SECONDS)
-			_status_label.text = "POISONED - dead in %d s - get a MEDKIT (H)" % left
+			lines.append("PASSED OUT (%d s)... the colours, man" % left)
 		Team.Status.DEAD:
 			tint = Color(0.55, 0.6, 0.75)
-			_status_label.text = "YOU'RE DEAD. Float around as a ghost.\nThe witch can bring you back (2 Witch's fingers + 1 Glowcap)."
-		_:
-			_status_label.text = ""
+			lines.append("YOU'RE DEAD. Float around as a ghost.\nGet your friends to carry your body to the witch.")
+	var poison := Team.poison_left(id)
+	if poison > 0.0 and status != Team.Status.DEAD:
+		tint = Color(0.75, 1.0, 0.7)
+		dark = maxf(dark, 0.5 * (1.0 - poison / Team.POISON_SECONDS))
+		lines.append("POISONED - dead in %d s - MEDKIT (H) or the witch" % int(ceil(poison)))
+	if Team.stuck_in(id) != "":
+		lines.append("STUCK in a %s - a friend has to pull you out" % Team.stuck_in(id))
+	if Team.police_left > 0.0:
+		var missing: String = Team.players.get(Team.missing_peer, {}).get("name", "someone")
+		lines.append("POLICE coming in %d s - find %s!" % [int(Team.police_left), missing])
+	_status_label.text = "\n".join(lines)
+	if _gag_left > 0.0:
+		tint = Color(0.7, 1.0, 0.4)
+		strength = maxf(strength, 0.4)
 	_effect.visible = strength > 0.0 or dark > 0.0 or tint != Color.WHITE
 	mat.set_shader_parameter("strength", strength)
 	mat.set_shader_parameter("dark", dark)
 	mat.set_shader_parameter("tint", Vector3(tint.r, tint.g, tint.b))
-	_inventory_label.text = "Medkits: %d   Batteries: %d   Flashlight (T): %d%%" % [
-		Team.count(id, "medkit"), Team.count(id, "battery"), int(me.battery * 100.0)
+	var pockets := []
+	for item in ["flare", "whistle", "walkie", "compass", "wine", "duck", "lottery"]:
+		var n := Team.count(id, item)
+		if n > 0:
+			pockets.append("%s%s" % [Team.ITEM_NAMES[item], " x%d" % n if n > 1 else ""])
+	_inventory_label.text = "Medkits: %d   Team batteries: %d   Torch (T): %d%%%s" % [
+		Team.count(id, "medkit"), Team.batteries, int(me.battery * 100.0),
+		("\nPockets (G/B/V): " + ", ".join(pockets)) if not pockets.is_empty() else ""
 	]
 	_hint.text = me.look_hint()
+	_guide.visible = _journal_open and me.holding_guide()
+	_compass.visible = Team.count(id, "compass") > 0 and status != Team.Status.DEAD
+	if _compass.visible:
+		_compass.text = _compass_strip(fposmod(rad_to_deg(-me.global_rotation.y), 360.0))
+
+
+## "· · NW · N · NE · ·" centred on where you're facing (0 = north = -Z).
+func _compass_strip(heading: float) -> String:
+	var marks := {0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW"}
+	var parts: Array[String] = []
+	for i in range(-4, 5):
+		var deg := int(round(fposmod(heading + i * 15.0, 360.0) / 15.0)) * 15 % 360
+		parts.append(marks.get(deg, "·"))
+	return "[  " + "   ".join(parts) + "  ]"
+
+
+# --- the extra bits other scripts call through the "hud" group ----------------------------------
+
+
+func is_night() -> bool:
+	var level := get_tree().get_first_node_in_group("level")
+	return level != null and level.get("_night") == true
+
+
+func menu_open() -> bool:
+	return _menu.visible
+
+
+## A screen-wide gag (vomit...).
+func play_gag(gag: String) -> void:
+	if gag == "vomit":
+		_gag_left = 3.0
+
+
+## Force-feeding tug-of-war meter (only shown to the two people in it).
+func show_duel(running: bool, meter: float, am_feeder: bool) -> void:
+	_duel.visible = running
+	_duel.value = (meter * (1.0 if am_feeder else -1.0)) * 50.0 + 50.0
+	_duel_label.visible = running
+	_duel_label.text = "SPAM T!  shove it in!" if am_feeder else "SPAM T!  keep your mouth shut!"
+
+
+## Seeing things in the dark: the Hag, for a split second, just at the edge of your torch.
+func show_shadow_figure() -> void:
+	var me := _local_player()
+	if me == null:
+		return
+	var ModelFit := preload("res://scripts/model_fit.gd")
+	var ghost := ModelFit.fit("res://assets/polypizza/hag.glb", Vector3(1.2, 2.5, 1.2), 0.0)
+	var side := 1.0 if randf() < 0.5 else -1.0
+	var dir: Vector3 = (-me.global_basis.z).rotated(Vector3.UP, side * deg_to_rad(randf_range(30, 50)))
+	get_tree().current_scene.add_child(ghost)
+	ghost.global_position = me.global_position + dir * randf_range(8, 14) + Vector3(0, 1.25, 0)
+	ghost.look_at(me.global_position + Vector3(0, 1.25, 0))
+	get_tree().create_timer(randf_range(0.25, 0.6)).timeout.connect(ghost.queue_free)
+	Sfx.play("hag_whisper", ghost.global_position)
+
+
+## A moment for the end-of-day reel: what happened, plus a snapshot of this player's screen.
+func remember_highlight(text: String, _peer_id := 0) -> void:
+	var image: Image = null
+	if DisplayServer.get_name() != "headless":
+		image = get_viewport().get_texture().get_image()
+	if image:
+		image.resize(320, 180)
+	_highlights.append({"text": text, "image": image})
+	if _highlights.size() > 8:
+		_highlights.pop_front()
+
+
+## Main calls this with the round phase; the reel shows at night (WRAP = 2).
+func set_phase(phase: int) -> void:
+	if phase == _phase:
+		return
+	_phase = phase
+	if phase == 2:
+		_show_reel()
+	else:
+		_reel.visible = false
+		if phase == 0:
+			_highlights.clear()
+
+
+func _show_reel() -> void:
+	for child in _reel_grid.get_children():
+		child.queue_free()
+	_reel_title.text = "TODAY'S HIGHLIGHTS" if not _highlights.is_empty() else "TODAY'S HIGHLIGHTS\nNothing happened. Suspicious."
+	for h in _highlights:
+		var box := VBoxContainer.new()
+		if h["image"]:
+			var tex := TextureRect.new()
+			tex.texture = ImageTexture.create_from_image(h["image"])
+			tex.custom_minimum_size = Vector2(240, 135)
+			tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			box.add_child(tex)
+		var cap := _label(h["text"], 14)
+		cap.custom_minimum_size = Vector2(240, 0)
+		cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(cap)
+		_reel_grid.add_child(box)
+	_reel.visible = true
 
 
 func _build_menu() -> void:
@@ -316,8 +449,57 @@ func _build_game() -> void:
 	_guide.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_guide.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_guide.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
-	_guide.modulate = Color(0.85, 1, 0.85, 0.9)
+	_guide.modulate = Color(0.85, 1, 0.85, 0.95)
+	_guide.visible = false
 	_game.add_child(_guide)
+
+	_compass = _label("", 20)
+	_compass.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 70)
+	_compass.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_compass.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_compass.modulate = Color(1, 0.95, 0.75)
+	_game.add_child(_compass)
+
+	var duel_box := VBoxContainer.new()
+	duel_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	duel_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	duel_box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	duel_box.position.y += 110
+	duel_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_game.add_child(duel_box)
+	_duel_label = _label("", 22)
+	_duel_label.modulate = Color(1, 0.6, 0.3)
+	_duel_label.visible = false
+	duel_box.add_child(_duel_label)
+	_duel = ProgressBar.new()
+	_duel.custom_minimum_size = Vector2(420, 26)
+	_duel.show_percentage = false
+	_duel.value = 50.0
+	_duel.visible = false
+	_duel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	duel_box.add_child(_duel)
+
+	_reel = ColorRect.new()
+	_reel.color = Color(0, 0, 0, 0.8)
+	_reel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_reel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reel.visible = false
+	_game.add_child(_reel)
+	var reel_center := CenterContainer.new()
+	reel_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reel_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reel.add_child(reel_center)
+	var reel_box := VBoxContainer.new()
+	reel_box.add_theme_constant_override("separation", 14)
+	reel_center.add_child(reel_box)
+	_reel_title = _label("TODAY'S HIGHLIGHTS", 34)
+	_reel_title.modulate = Color(1, 0.9, 0.5)
+	reel_box.add_child(_reel_title)
+	_reel_grid = GridContainer.new()
+	_reel_grid.columns = 4
+	_reel_grid.add_theme_constant_override("h_separation", 14)
+	_reel_grid.add_theme_constant_override("v_separation", 14)
+	reel_box.add_child(_reel_grid)
 
 	_intro = ColorRect.new()
 	(_intro as ColorRect).color = Color(0, 0, 0, 0.85)

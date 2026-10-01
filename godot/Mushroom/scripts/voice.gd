@@ -450,7 +450,7 @@ func _emit_noises(players: Dictionary, me: int, now: float) -> void:
 func _noise(pos: Vector3, loudness: float, peer: int) -> void:
 	_stats["noise"] += 1
 	# Through the tree: the autoload's name "Noise" is shadowed by Godot's built-in Noise class.
-	var noise := get_node_or_null("/root/Noise")
+	var noise := get_node_or_null("/root/Hearing")
 	if noise != null:
 		noise.call("emit", pos, loudness, peer)
 
