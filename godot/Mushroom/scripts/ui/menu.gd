@@ -76,6 +76,7 @@ var _pause_cash: Label
 var _pause_quota: Label
 var _pause_extra: Label
 var _pause_crew: Label
+var _cheats_button: Button  # host only
 var _tip: Label
 var _tip_index := 0
 var _tip_left := 8.0
@@ -503,6 +504,9 @@ func _update_pause_info() -> void:
 	if _pause_day == null:
 		return
 	_pause_day.text = "DAY %d" % Team.day
+	if _cheats_button:
+		_cheats_button.visible = multiplayer.is_server()
+		_cheats_button.text = "Cheats: %s" % ("ON" if Team.cheats else "OFF")
 	_pause_cash.text = "%d €" % Team.cash
 	var due := Team.quota_day()
 	var left := due - Team.day
@@ -916,7 +920,7 @@ func _build_credits() -> Control:
 
 
 func _build_pause() -> Control:
-	var w := _window("PAUSE", Vector2(780, 470))
+	var w := _window("PAUSE", Vector2(780, 530))
 	var content: VBoxContainer = w[1]
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 24)
@@ -931,6 +935,8 @@ func _build_pause() -> Control:
 	buttons.add_child(_button("Settings", _open.bind("settings")))
 	buttons.add_child(_button("Controls", _open.bind("controls")))
 	buttons.add_child(_button("Field Journal", _on_journal))
+	_cheats_button = _button("Cheats: OFF", func(): Team.request_cheats.rpc_id(1, not Team.cheats))
+	buttons.add_child(_cheats_button)
 	buttons.add_child(_button("Leave to Menu", func(): _confirm(
 		"Leave this game? Your friends keep playing without you.", "Leave", _leave), "Danger"))
 	buttons.add_child(_button("Quit to Desktop", func(): _confirm("Quit the game?", "Quit", _quit), "Danger"))

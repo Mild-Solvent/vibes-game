@@ -60,6 +60,8 @@ var _dark := 0.0  # seconds spent in the dark with no light
 var _spook_in := 5.0
 var _step := 0.0
 var _pond_nag := 30.0
+var noclip := false  # cheat: fly through everything
+var _model_base := 0.0
 
 
 func setup(id: int, player_name: String, body_color: Color, character := 0) -> void:
@@ -147,7 +149,8 @@ func _physics_process(delta: float) -> void:
 	camera.position = Vector3.ZERO
 	_car_look = 0.0
 
-	if s == Team.Status.DEAD:
+	if s == Team.Status.DEAD or noclip:
+		$Collision.disabled = true
 		_ghost_move(delta, captured)
 		return
 	if s == Team.Status.PASSED_OUT:
@@ -583,6 +586,7 @@ func _build() -> void:
 	var path := "res://assets/kenney/mini-characters/character-%s.glb" % CHARACTERS[variant % CHARACTERS.size()]
 	_model = ModelFit.fit(path, Vector3(1.2, 1.7, 1.2), PI)
 	_model.position.y += 0.85
+	_model_base = _model.position.y
 	add_child(_model)
 	_monster = ModelFit.fit(MONSTER, Vector3(1.4, 2.1, 1.4), PI)
 	_monster.position.y += 1.05
@@ -651,6 +655,10 @@ func _process(delta: float) -> void:
 	_name_label.modulate = Color(0.7, 0.8, 1.0, 0.6) if s == Team.Status.DEAD else Color.WHITE
 	_name_label.visible = not viewer_tripping
 	_model.rotation.x = -PI / 2.0 if s == Team.Status.PASSED_OUT else 0.0
+	# Down a hole: only your head sticks out.
+	var sunk := -1.3 if Team.stuck_in(peer_id) == "hole" else 0.0
+	_model.position.y = move_toward(_model.position.y, _model_base + sunk, 0.1)
+	head.position.y = move_toward(head.position.y, 1.55 + sunk, 0.1)
 	if is_multiplayer_authority():
 		camera.rotation.z = 1.3 if s == Team.Status.PASSED_OUT else 0.0
 	if _anim == null or delta <= 0.0:

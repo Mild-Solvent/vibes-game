@@ -13,19 +13,19 @@ signal died(peer_id: int, reason: String)
 signal revived(peer_id: int)
 signal toast(text: String)
 signal battery_installed
-signal game_over(reason: String)
+signal game_over(stats: Dictionary)
 signal flare_fired(pos: Vector3)
 
 enum Status { OK, TRIPPING, PASSED_OUT, POISONED, DEAD }
 
 const PRICES := {
 	"medkit": 40, "battery": 8, "house": 300, "slot": 20, "old_slot": 5, "basket": 15, "compass": 25,
-	"flare": 12, "whistle": 6, "walkie": 30, "wine": 4, "duck": 3, "lottery": 2,
+	"flare": 12, "whistle": 6, "walkie": 30, "wine": 4, "duck": 3, "lottery": 2, "rope": 10,
 }
 const ITEM_NAMES := {
 	"medkit": "medkit", "battery": "battery", "basket": "basket", "compass": "compass", "flare": "flare",
 	"whistle": "whistle", "walkie": "walkie-talkie", "wine": "bottle of cheap wine", "duck": "rubber duck",
-	"lottery": "lottery ticket",
+	"lottery": "lottery ticket", "rope": "rope",
 }
 const POISON_SECONDS := 240.0  # once it kicks in: get a medkit or get to the witch
 const TRIP_SECONDS := 40.0
@@ -45,6 +45,9 @@ var car_seats := [0, 0, 0, 0]  # peer ids in the car, driver first
 var quota_index := 0
 var police_left := -1.0  # counting down while a friend is missing (-1 = nobody missing)
 var missing_peer := 0
+var cheats := false  # the host can switch these on from the pause menu (for testing alone)
+var earned := 0  # everything ever made this run (for the game over screen)
+var _deaths: Array[String] = []  # host: "Adam - the Hungry Hag", this run
 ## peer id -> {"name", "status", "left", "poison", "trip", "out", "dead", items...}
 var players := {}
 
@@ -139,6 +142,8 @@ func reset() -> void:
 	quota_index = 0
 	police_left = -1.0
 	missing_peer = 0
+	earned = 0
+	_deaths.clear()
 	for peer in players:
 		players[peer] = _fresh(players[peer]["name"])
 	_recent_trips.clear()
@@ -215,6 +220,10 @@ func kill(peer_id: int, reason: String) -> void:
 	if not players.has(peer_id) or not is_alive(peer_id):
 		return
 	var p: Dictionary = players[peer_id]
+	if cheats and p.get("god", false):
+		tell(peer_id, "God mode saved you from %s." % reason)
+		return
+	_deaths.append("%s - %s" % [p["name"], reason])
 	p["dead"] = true
 	p["poison"] = 0.0
 	p["trip"] = 0.0
@@ -225,6 +234,12 @@ func kill(peer_id: int, reason: String) -> void:
 	_derive(p)
 	_push()
 	_died.rpc(peer_id, reason)
+	var anyone_alive := false
+	for other in players:
+		if not players[other]["dead"]:
+			anyone_alive = true
+	if not anyone_alive:
+		_end_run("Everybody's dead. The forest keeps the mushrooms.")
 
 
 func revive(peer_id: int) -> void:
@@ -249,6 +264,8 @@ func cure(peer_id: int) -> void:
 
 func add_cash(amount: int) -> void:
 	cash += amount
+	if amount > 0:
+		earned += amount
 	_push()
 
 
@@ -287,11 +304,8 @@ func next_day() -> void:
 			tell(0, "Uncle Fero took his %d €. \"Same time in %d days, boys. It'll be %d.\"" % [
 				amount, QUOTA_EVERY, quota_amount()])
 		else:
-			var reason := "Uncle Fero came for %d € and you had %d €. He took the car, the tents and a kidney." % [
-				amount, cash]
-			tell(0, reason)
-			_game_over.rpc(reason)
-			reset()
+			_end_run("Uncle Fero came for %d € and you had %d €. He took the car, the tents and a kidney." % [
+				amount, cash])
 			return
 	day += 1
 	_push()
@@ -328,6 +342,13 @@ func tell(peer_id: int, text: String) -> void:
 		toast.emit(text)
 	else:
 		_toast.rpc_id(peer_id, text)
+
+
+## Host: the run is over. Everyone gets the game over screen; the world starts again at day 1.
+func _end_run(reason: String) -> void:
+	var stats := {"reason": reason, "days": day, "earned": earned, "owed": quota_amount(), "deaths": _deaths.duplicate()}
+	_game_over.rpc(stats)
+	reset()
 
 
 ## Host: something worth seeing again in the end-of-day reel. Every peer snaps its own screen.
@@ -405,6 +426,76 @@ func request_battery() -> void:
 		_battery_ok.rpc_id(peer)
 
 
+## You won the escape minigame and got yourself out (not out of a hole: those need a friend).
+@rpc("any_peer", "call_local", "reliable")
+func request_self_free() -> void:
+	if not multiplayer.is_server():
+		return
+	var peer := _sender()
+	var what := stuck_in(peer)
+	if what == "" or what == "hole":
+		return
+	set_stuck(peer, "")
+	tell(peer, "You wriggle free of the %s!" % what)
+
+
+## You botched getting out of a bear trap. It hurts. A lot.
+@rpc("any_peer", "call_local", "reliable")
+func request_trap_hurt() -> void:
+	if not multiplayer.is_server():
+		return
+	var peer := _sender()
+	if stuck_in(peer) == "bear trap":
+		set_status(peer, Status.PASSED_OUT, 10.0)
+		tell(0, "%s fumbled the bear trap and passed out from the pain." % players[peer]["name"])
+
+
+## Host only: switch cheats on or off for everyone.
+@rpc("any_peer", "call_local", "reliable")
+func request_cheats(on: bool) -> void:
+	if multiplayer.is_server() and _sender() == 1:
+		cheats = on
+		_push()
+		tell(0, "CHEATS %s. F1 free and heal yourself, F2 +500 €, F3 back to camp." % ("ON" if on else "OFF"))
+
+
+## A cheat key (only works while the host has cheats on).
+@rpc("any_peer", "call_local", "reliable")
+func request_cheat(what: String) -> void:
+	if not multiplayer.is_server() or not cheats:
+		return
+	var peer := _sender()
+	match what:
+		"free":
+			set_stuck(peer, "")
+			cure(peer)
+			set_status(peer, Status.OK)
+			if players.has(peer) and players[peer]["dead"]:
+				revive(peer)
+		"cash":
+			add_cash(500)
+		"god":
+			if players.has(peer):
+				players[peer]["god"] = not players[peer].get("god", false)
+				tell(peer, "God mode %s." % ("ON" if players[peer]["god"] else "OFF"))
+				_push()
+		"revive_all":
+			for other in players:
+				cure(other)
+				set_stuck(other, "")
+				if players[other]["dead"]:
+					revive(other)
+		"identify_all":
+			const Mushroom := preload("res://scripts/mushroom.gd")
+			for k in Mushroom.KINDS:
+				known[k] = true
+			_push()
+		_:
+			var level := get_tree().get_first_node_in_group("level")
+			if level and level.has_method("cheat"):
+				level.cheat(what, peer)
+
+
 ## Pull a stuck friend out of a trap or the mud (you can't do it yourself).
 @rpc("any_peer", "call_local", "reliable")
 func request_free(target: int) -> void:
@@ -414,6 +505,9 @@ func request_free(target: int) -> void:
 	if peer == target or not is_alive(peer) or stuck_in(target) == "":
 		return
 	var what := stuck_in(target)
+	if what == "hole" and not take(peer, "rope"):
+		tell(peer, "%s is down a hole. You need a ROPE (Jano's shop) to get them out." % players[target]["name"])
+		return
 	set_stuck(target, "")
 	tell(0, "%s pulled %s out of the %s." % [players[peer]["name"], players[target]["name"], what])
 
@@ -497,7 +591,7 @@ func _push() -> void:
 		_sync.rpc({
 			"cash": cash, "day": day, "batteries": batteries, "known": known, "house": house,
 			"players": players, "car": car_seats, "quota": quota_index, "police": police_left,
-			"missing": missing_peer,
+			"missing": missing_peer, "cheats": cheats,
 		})
 	changed.emit()
 
@@ -514,6 +608,7 @@ func _sync(state: Dictionary) -> void:
 	quota_index = state["quota"]
 	police_left = state["police"]
 	missing_peer = state["missing"]
+	cheats = state.get("cheats", false)
 	changed.emit()
 
 
@@ -538,8 +633,8 @@ func _flare(pos: Vector3) -> void:
 
 
 @rpc("authority", "call_local", "reliable")
-func _game_over(reason: String) -> void:
-	game_over.emit(reason)
+func _game_over(stats: Dictionary) -> void:
+	game_over.emit(stats)
 
 
 ## Host: a queued effect kicks in now.

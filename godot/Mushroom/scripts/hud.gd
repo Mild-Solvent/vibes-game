@@ -63,6 +63,11 @@ var _reel_title: Label
 var _highlights: Array[Dictionary] = []
 var _phase := -1
 var menu: CanvasLayer  # the real menu (scripts/ui/menu.gd), set by main
+var _cheat_panel: Control
+var _cheat_tag: Label
+var _over: ColorRect
+var _over_text: Label
+var _over_grid: GridContainer
 var intro_enabled := true
 
 
@@ -72,6 +77,7 @@ func _ready() -> void:
 	_build_game()
 	show_menu()
 	Team.toast.connect(show_toast)
+	Team.game_over.connect(_show_game_over)
 
 
 func _process(delta: float) -> void:
@@ -92,6 +98,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _intro_index >= 0 and (event.is_action_pressed("jump") or event.is_action_pressed("grab")):
 		_next_intro()
 		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F1 \
+			and _game.visible:
+		_cheat_panel.toggle()
 	elif event.is_action_pressed("journal"):
 		var me := _local_player()
 		if me and me.holding_guide():
@@ -173,6 +182,7 @@ func _local_player() -> Node:
 
 func _update_game() -> void:
 	_cash_label.text = "DAY %d     %d €" % [Team.day, Team.cash]
+	_cheat_tag.visible = Team.cheats
 	var me := _local_player()
 	if me == null:
 		return
@@ -300,6 +310,98 @@ func remember_highlight(text: String, _peer_id := 0) -> void:
 	_highlights.append({"text": text, "image": image})
 	if _highlights.size() > 8:
 		_highlights.pop_front()
+
+
+func add_child_minigame_and_cheats() -> void:
+	_game.add_child(preload("res://scripts/ui/escape_minigame.gd").new())
+	_cheat_panel = preload("res://scripts/ui/cheat_panel.gd").new()
+	_game.add_child(_cheat_panel)
+	_cheat_tag = _label("CHEATS ON", 16, HORIZONTAL_ALIGNMENT_LEFT)
+	_cheat_tag.modulate = Color(1, 0.4, 0.3)
+	_cheat_tag.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 14)
+	_cheat_tag.visible = false
+	_game.add_child(_cheat_tag)
+
+
+## The game over screen: how everyone died, how long you lasted, the highlights. Click to go again.
+func _build_game_over() -> void:
+	_over = ColorRect.new()
+	_over.color = Color(0.03, 0.02, 0.02, 0.93)
+	_over.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_over.visible = false
+	add_child(_over)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_over.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	center.add_child(box)
+	var title := _label("GAME OVER", 72)
+	title.modulate = Color(0.95, 0.25, 0.2)
+	box.add_child(title)
+	_over_text = _label("", 20)
+	box.add_child(_over_text)
+	_over_grid = GridContainer.new()
+	_over_grid.columns = 4
+	_over_grid.add_theme_constant_override("h_separation", 12)
+	_over_grid.add_theme_constant_override("v_separation", 12)
+	box.add_child(_over_grid)
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	var again := Button.new()
+	again.text = "  Go again (day 1)  "
+	again.add_theme_font_size_override("font_size", 24)
+	again.pressed.connect(func():
+		_over.visible = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	buttons.add_child(again)
+	var leave := Button.new()
+	leave.text = "  Leave to menu  "
+	leave.add_theme_font_size_override("font_size", 24)
+	leave.pressed.connect(func():
+		Net.leave()
+		get_tree().reload_current_scene())
+	buttons.add_child(leave)
+	var quit := Button.new()
+	quit.text = "  Quit  "
+	quit.add_theme_font_size_override("font_size", 24)
+	quit.pressed.connect(func(): get_tree().quit())
+	buttons.add_child(quit)
+
+
+func _show_game_over(stats: Dictionary) -> void:
+	var lines: Array[String] = [stats.get("reason", "")]
+	lines.append("")
+	lines.append("Survived %d day%s · earned %d € · still owed Uncle Fero %d €" % [
+		stats.get("days", 1), "" if stats.get("days", 1) == 1 else "s", stats.get("earned", 0), stats.get("owed", 0)])
+	var deaths: Array = stats.get("deaths", [])
+	if not deaths.is_empty():
+		lines.append("")
+		lines.append("HOW IT WENT:")
+		for d in deaths:
+			lines.append("✝ " + str(d))
+	_over_text.text = "\n".join(lines)
+	for child in _over_grid.get_children():
+		child.queue_free()
+	for h in _highlights.slice(-8):
+		var cell := VBoxContainer.new()
+		if h["image"]:
+			var tex := TextureRect.new()
+			tex.texture = ImageTexture.create_from_image(h["image"])
+			tex.custom_minimum_size = Vector2(200, 112)
+			tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			cell.add_child(tex)
+		var cap := _label(h["text"], 13)
+		cap.custom_minimum_size = Vector2(200, 0)
+		cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cell.add_child(cap)
+		_over_grid.add_child(cell)
+	_highlights.clear()
+	_over.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 ## Main calls this with the round phase; the reel shows at night (WRAP = 2).
@@ -510,6 +612,9 @@ func _build_game() -> void:
 	_reel_grid.add_theme_constant_override("h_separation", 14)
 	_reel_grid.add_theme_constant_override("v_separation", 14)
 	reel_box.add_child(_reel_grid)
+
+	add_child_minigame_and_cheats()
+	_build_game_over()
 
 	_intro = ColorRect.new()
 	(_intro as ColorRect).color = Color(0, 0, 0, 0.85)

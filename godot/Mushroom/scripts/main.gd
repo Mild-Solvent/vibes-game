@@ -67,6 +67,7 @@ func _ready() -> void:
 
 	director = DirectorScript.new()
 	director.name = "Director"
+	director.add_to_group("director")
 	director.levels = levels
 	add_child(director)
 
@@ -92,6 +93,7 @@ func _ready() -> void:
 	Net.player_joined.connect(_on_player_joined)
 	Net.player_left.connect(_on_player_left)
 	director.changed.connect(_on_director_changed)
+	Team.game_over.connect(_on_game_over)
 
 	_activate(0)
 	_handle_command_line()
@@ -120,6 +122,12 @@ func _on_lobby_started() -> void:
 	hud.show_game()
 	menu.in_game = true
 	menu.hide_all()
+
+
+## Host: after a game over, the next run starts from a fresh morning.
+func _on_game_over(_stats: Dictionary) -> void:
+	if multiplayer.is_server() and director.running:
+		director.start(0)
 
 
 func _on_leave() -> void:

@@ -33,6 +33,7 @@ const BOAR_COUNT := 10
 const WOLF_COUNT := 9
 const SPARE_BASKETS := 4
 const TRAP_COUNT := 70
+const HOLE_COUNT := 12
 ## Harmless animals: [model, count, size, speed]
 const CRITTERS := [
 	["animal-deer.glb", 30, Vector3(0.9, 1.5, 1.4), 2.2],
@@ -52,7 +53,7 @@ const SHOP := [
 	["medkit", "MEDKIT - cures poison, wakes the passed-out"], ["battery", "BATTERY - for everyone's torches"],
 	["basket", "BASKET"], ["compass", "COMPASS - no more getting lost"], ["flare", "FLARE - everyone sees it. Everything hears it."],
 	["whistle", "WHISTLE"], ["walkie", "WALKIE-TALKIE (hold V)"], ["wine", "CHEAP WINE"], ["duck", "RUBBER DUCK"],
-	["lottery", "LOTTERY TICKET"],
+	["lottery", "LOTTERY TICKET"], ["rope", "ROPE - pull a friend out of a hole"],
 ]
 const EPITAPHS := [
 	"HERE LIES JOŽO\nhe said it was a chanterelle", "R.I.P. MILAN\nate the pretty one", "FERO'S LAST CUSTOMER\npaid late",
@@ -84,6 +85,7 @@ var _rng := RandomNumberGenerator.new()
 var _started := false
 var _police_check := 0.0
 var spawn_override := ""  # testing: spawn at a named place instead of camp
+var monsters_enabled := true  # cheat: switch the hag and wolves off
 
 
 func _ready() -> void:
@@ -117,6 +119,7 @@ func _ready() -> void:
 	Team.revived.connect(_on_revived)
 	Team.changed.connect(_on_team_changed)
 	Team.flare_fired.connect(_on_flare)
+	Team.game_over.connect(_on_game_over)
 
 
 ## Host, all the time (not just while the day runs): Babka looks at her counter.
@@ -220,12 +223,59 @@ func apply_state(phase: int, _event: int, _sub: int, time_left: float) -> void:
 			node.visible = not night
 		for boar in _boars:
 			boar.night = night
-		for wolf in _wolves:
-			wolf.night = night
-		if _hag:
-			_hag.night = night
+		_set_monsters_night()
 		for loc in _locations.values():
 			loc.set_night(night)
+
+
+func _set_monsters_night() -> void:
+	for wolf in _wolves:
+		wolf.night = _night and monsters_enabled
+	if _hag:
+		_hag.night = _night and monsters_enabled
+
+
+## Every peer: the run ended. Bodies go, everyone wakes up at camp, the next run starts at day 1.
+func _on_game_over(_stats: Dictionary) -> void:
+	for body in _bodies.values():
+		body.put_away()
+	_witch_orders.clear()
+	_started = false
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.is_multiplayer_authority():
+			p.global_position = spawn_point(0)
+
+
+## Host: cheats the level knows how to do (Team handles the rest).
+func cheat(what: String, peer: int) -> void:
+	var director := get_tree().get_first_node_in_group("director")
+	match what:
+		"morning", "dusk", "midnight":
+			var t: float = {"morning": 0.05, "dusk": 0.55, "midnight": 0.9}[what]
+			if director:
+				if director.phase != Phase.LIVE:
+					director._enter(Phase.LIVE)
+				director.time_left = live_duration() * (1.0 - t)
+		"monsters":
+			monsters_enabled = not monsters_enabled
+			_set_monsters_night()
+			Team.tell(peer, "Hag and wolves %s." % ("ON" if monsters_enabled else "OFF"))
+		_:
+			if what.begins_with("spawn:"):
+				var kind := what.trim_prefix("spawn:")
+				var p := _player(peer)
+				if p == null:
+					return
+				for m in _mushrooms + find_children("*", "", true, false):
+					if m is MushroomScript and m.kind == kind:
+						m.reset_to_home()
+						m.global_position = p.global_position - p.global_basis.z * 1.5 + Vector3(0, 1.0, 0)
+						return
+				# None of that kind out here (cure ingredients live in their places): turn one into it.
+				var spare = _mushrooms[0]
+				spare.reset_to_home()
+				spare.global_position = p.global_position - p.global_basis.z * 1.5 + Vector3(0, 1.0, 0)
+				Team.tell(peer, "No %s nearby to fetch; there's another mushroom instead." % kind)
 
 
 func phase_text(phase: int, clock: String, _score: float, _sub: int) -> String:
@@ -681,6 +731,17 @@ func _build_traps() -> void:
 		trap.name = "Trap%d" % i
 		trap.build("bear trap" if i % 3 != 0 else "mud", Vector3(at.x, Terrain.height(at.x, at.z), at.z))
 		add_child(trap)
+	# Holes: big, obvious, with a warning sign. Only an idiot falls in. And then you need a rope.
+	for i in HOLE_COUNT:
+		var path: Array = Terrain.PATHS[i % Terrain.PATHS.size()]
+		var a: Vector2 = path[i % (path.size() - 1)]
+		var b: Vector2 = path[i % (path.size() - 1) + 1]
+		var side := (b - a).normalized().orthogonal() * (4.5 if i % 2 else -4.5)
+		var p := a.lerp(b, 0.3 + 0.4 * _rng.randf()) + side
+		var hole := TrapScript.new()
+		hole.name = "Hole%d" % i
+		hole.build("hole", Vector3(p.x, Terrain.height(p.x, p.y), p.y))
+		add_child(hole)
 
 
 ## Every peer: a red flare rises and burns over the trees for a while.
