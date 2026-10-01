@@ -126,9 +126,9 @@ func _build_island() -> void:
 	_tint(tree, Color(0.17, 0.16, 0.15))
 	for i in 5:
 		var a := i * TAU / 5.0 + 0.3
-		var basis := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, 0.35)
+		var rot := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, 0.35)
 		var p := Vector3(cos(a) * 1.2, _ground_at(Vector3.ZERO) + 0.1, sin(a) * 1.2)
-		_block(Vector3(2.0, 0.3, 0.35), Transform3D(basis, p), _m["old_wood"], false)
+		_block(Vector3(2.0, 0.3, 0.35), Transform3D(rot, p), _m["old_wood"], false)
 	_slab(Vector3(-2.3, 3.2, 0.4), Vector3(-2.27, 6.4, 0.43), _paint(Color(0.5, 0.45, 0.35)), false)
 	_slab(Vector3(-2.6, 3.15, 0.3), Vector3(-2.0, 3.25, 0.55), _m["wood"], false)
 	# A wayside shrine to the drowned.

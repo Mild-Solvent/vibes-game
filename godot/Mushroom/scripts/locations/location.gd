@@ -193,17 +193,17 @@ func _ramp(top: Vector3, bottom: Vector3, width: float, mat: Material = null, th
 	if up.y < 0.0:
 		up = -up
 		side = -side
-	var basis := Basis(side, up, fwd)
+	var rot := Basis(side, up, fwd)
 	var centre := (top + bottom) / 2.0 - up * thick / 2.0
 	var size := Vector3(width, thick, length)
 	if mat:
-		_block(size, Transform3D(basis, centre), mat, true)
+		_block(size, Transform3D(rot, centre), mat, true)
 	else:
 		var shape := BoxShape3D.new()
 		shape.size = size
 		var col := CollisionShape3D.new()
 		col.shape = shape
-		col.transform = Transform3D(basis, centre)
+		col.transform = Transform3D(rot, centre)
 		_static.add_child(col)
 
 

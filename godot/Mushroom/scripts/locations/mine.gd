@@ -339,8 +339,8 @@ func _build_mountain() -> void:
 		if absf(x) < 3.5:
 			continue
 		var s := _rng.randf_range(0.6, 1.8)
-		var basis := Basis.from_euler(Vector3(_rng.randf() * 0.6, _rng.randf() * TAU, _rng.randf() * 0.6))
-		_block(Vector3(s, s * 0.7, s), Transform3D(basis, Vector3(x, s * 0.2, _rng.randf_range(-1.2, 1.5))), m)
+		var rot := Basis.from_euler(Vector3(_rng.randf() * 0.6, _rng.randf() * TAU, _rng.randf() * 0.6))
+		_block(Vector3(s, s * 0.7, s), Transform3D(rot, Vector3(x, s * 0.2, _rng.randf_range(-1.2, 1.5))), m)
 
 
 func _build_portal() -> void:
@@ -360,8 +360,8 @@ func _build_portal() -> void:
 	for i in 7:
 		var p := Vector3(-9.0 + _rng.randf_range(-2.5, 2.5), 0, 6.0 + _rng.randf_range(-2.5, 2.5))
 		var s := _rng.randf_range(1.0, 2.4)
-		var basis := Basis.from_euler(Vector3(_rng.randf() * 0.5, _rng.randf() * TAU, _rng.randf() * 0.5))
-		_block(Vector3(s, s * 0.6, s), Transform3D(basis, p), _m["floor"])
+		var rot := Basis.from_euler(Vector3(_rng.randf() * 0.5, _rng.randf() * TAU, _rng.randf() * 0.5))
+		_block(Vector3(s, s * 0.6, s), Transform3D(rot, p), _m["floor"])
 	_solid(SURVIVAL + "barrel.glb", Vector3(0.8, 1.1, 0.8), Vector3(4.5, 0, 3.0), 0.0)
 	_solid(SURVIVAL + "barrel.glb", Vector3(0.8, 1.1, 0.8), Vector3(5.3, 0, 3.6), 0.4)
 	_solid(SURVIVAL + "box-large.glb", Vector3(1.2, 1.0, 1.2), Vector3(5.0, 0, 5.5), 0.3)
@@ -419,14 +419,14 @@ func _ladder(top: Vector3, bottom: Vector3) -> void:
 	var up := Vector3(0, fwd.z, -fwd.y)
 	if up.y < 0.0:
 		up = -up
-	var basis := Basis(up.cross(fwd).normalized(), up, fwd)
+	var rot := Basis(up.cross(fwd).normalized(), up, fwd)
 	for side in [-0.5, 0.5]:
-		_block(Vector3(0.08, 0.1, run.length()), Transform3D(basis, (top + bottom) / 2.0 + Vector3(side, 0, 0)),
+		_block(Vector3(0.08, 0.1, run.length()), Transform3D(rot, (top + bottom) / 2.0 + Vector3(side, 0, 0)),
 			_m["wood"], false)
 	var steps := int(run.length() / 0.35)
 	for i in steps:
 		var p := top + run * (float(i) + 0.5) / steps
-		_block(Vector3(1.0, 0.06, 0.08), Transform3D(basis, p + up * 0.04), _m["wood"], false)
+		_block(Vector3(1.0, 0.06, 0.08), Transform3D(rot, p + up * 0.04), _m["wood"], false)
 
 
 func _build_grotto() -> void:
@@ -450,8 +450,8 @@ func _build_grotto() -> void:
 	for i in 14:
 		var p := Vector3(_rng.randf_range(9.0, 13.3), YOFF, _rng.randf_range(-11.8, -7.0))
 		var h := _rng.randf_range(0.3, 1.1)
-		var basis := Basis.from_euler(Vector3(_rng.randf_range(-0.5, 0.5), _rng.randf() * TAU, _rng.randf_range(-0.5, 0.5)))
-		_block(Vector3(0.14, h, 0.14), Transform3D(basis, p + Vector3(0, h * 0.4, 0)), _m["crystal"], false)
+		var rot := Basis.from_euler(Vector3(_rng.randf_range(-0.5, 0.5), _rng.randf() * TAU, _rng.randf_range(-0.5, 0.5)))
+		_block(Vector3(0.14, h, 0.14), Transform3D(rot, p + Vector3(0, h * 0.4, 0)), _m["crystal"], false)
 	_label("tu rastú\nkoboldie hríby", Vector3(13.45, 2.2, -9.0), -PI / 2.0, 36, Color(0.6, 1.0, 0.5), true)
 
 
@@ -536,7 +536,8 @@ func _build_lights() -> void:
 	_lamp(Vector3(0, 3.4, -16.0), warm, 1.0, 7.0)
 	_lamp(Vector3(-10.0, 5.0, -9.0), Color(0.7, 0.75, 0.9), 0.5, 8.0)
 	_lamp(Vector3(2.0, 8.4, -14.0), warm, 0.6, 6.0, true)
-	_lamp(Vector3(10.5, 3.0, -8.5), Color(0.6, 1.0, 0.4), 2.2, 11.0)
+	var glow := _lamp(Vector3(10.5, 3.0, -8.5), Color(0.6, 1.0, 0.4), 3.0, 12.0)
+	glow.omni_attenuation = 0.8  # the grotto should glow: it's where you're going
 	_lamp(Vector3(-7.0, 1.6, -3.5), Color(0.6, 0.8, 0.3), 0.5, 4.0)
 	for p in [Vector3(0, 2.4, -8.0), Vector3(0, 3.2, -16.0), Vector3(2.0, 8.2, -14.0)]:
 		_model(GRAVE + "lantern-candle.glb", Vector3(0.3, 0.45, 0.3), p, 0.0)

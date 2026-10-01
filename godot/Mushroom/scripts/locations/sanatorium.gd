@@ -14,6 +14,7 @@ extends "res://scripts/locations/location.gd"
 const NurseScript := preload("res://scripts/locations/nurse.gd")
 const INGREDIENT := "mothers_mould"
 const FRONT_YAW := PI  # the road comes in from global -Z
+const ALARM_RINGS := 45.0  # seconds of siren and flashing
 const FY := 3.6  # ground floor level
 const GC := 7.0  # ground floor ceiling
 const BC := 3.3  # basement ceiling
@@ -38,6 +39,7 @@ var _pa_spots: Array[Vector3] = []
 var _pa_timer := 40.0
 var _pa_clear := 0.0
 var _alarm_sound := 0.0
+var _alarm_since := 0.0  # msec when the alarm went off (every peer)
 var _night_window: OmniLight3D
 var _night_glow: MeshInstance3D
 var _rng := RandomNumberGenerator.new()
@@ -122,13 +124,15 @@ func entrance_position() -> Vector3:
 func _process(delta: float) -> void:
 	_update_flicker()
 	if _alarm:
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 6.0)
+		# The siren and the flashing last a while; then it's dim red light and a locked door till dawn.
+		var ringing := Time.get_ticks_msec() - _alarm_since < ALARM_RINGS * 1000.0
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 6.0) if ringing else 0.2
 		for entry in _lights:
 			var light: OmniLight3D = entry[0]
 			light.light_color = Color(1.0, 0.08, 0.05)
 			light.light_energy = entry[2] * (0.4 + 1.4 * pulse)
 		_alarm_sound -= delta
-		if _alarm_sound <= 0.0:
+		if ringing and _alarm_sound <= 0.0:
 			_alarm_sound = 2.5
 			Sfx.play("police_siren", _g(Vector3(0, FY + 2.5, 0)))
 	if _pa_clear > 0.0:
@@ -170,6 +174,7 @@ func _trigger_alarm() -> void:
 @rpc("authority", "call_local", "reliable")
 func _set_alarm(on: bool) -> void:
 	_alarm = on
+	_alarm_since = Time.get_ticks_msec()
 	_set_body(_door_block, on)
 	_door_block.visible = false
 	_locked_label.visible = on
@@ -287,9 +292,9 @@ func _scatter_glass(centre: Vector3, half: Vector2, count: int) -> void:
 	var glass := _paint(Color(0.55, 0.7, 0.75), false, 0.15)
 	for i in count:
 		var p := centre + Vector3(_rng.randf_range(-half.x, half.x), 0.01, _rng.randf_range(-half.y, half.y))
-		var basis := Basis(Vector3.UP, _rng.randf() * TAU)
+		var rot := Basis(Vector3.UP, _rng.randf() * TAU)
 		_block(Vector3(_rng.randf_range(0.05, 0.18), 0.01, _rng.randf_range(0.04, 0.12)),
-			Transform3D(basis, p), glass, false)
+			Transform3D(rot, p), glass, false)
 
 
 func _build_ground_floor() -> void:
@@ -388,9 +393,9 @@ func _chute_side(top: Vector3, bottom: Vector3, side: float) -> void:
 	var up := Vector3.BACK.cross(fwd).normalized()
 	if up.y < 0.0:
 		up = -up
-	var basis := Basis(up.cross(fwd).normalized(), up, fwd)
+	var rot := Basis(up.cross(fwd).normalized(), up, fwd)
 	var centre := (top + bottom) / 2.0 + Vector3(0, 0, side) + up * 0.45
-	_block(Vector3(0.08, 0.9, run.length()), Transform3D(basis, centre), _m["metal"], true)
+	_block(Vector3(0.08, 0.9, run.length()), Transform3D(rot, centre), _m["metal"], true)
 
 
 func _build_porch() -> void:

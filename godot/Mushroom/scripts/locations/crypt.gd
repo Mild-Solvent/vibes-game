@@ -232,8 +232,8 @@ func _build_chapel() -> void:
 	# Gable roof and the front gable, a little bell-cote and a cross.
 	var pitch := 0.62
 	for side in [-1.0, 1.0]:
-		var basis := Basis(Vector3.BACK, -side * pitch)
-		_block(Vector3(6.4, 0.3, 14.6), Transform3D(basis, Vector3(side * 2.55, WT + 1.7, -2.0)), _m["roof"])
+		var rot := Basis(Vector3.BACK, -side * pitch)
+		_block(Vector3(6.4, 0.3, 14.6), Transform3D(rot, Vector3(side * 2.55, WT + 1.7, -2.0)), _m["roof"])
 	for z in [4.85, -8.85]:
 		for i in 6:
 			var w := 9.8 * (1.0 - float(i) / 6.0)
@@ -396,7 +396,8 @@ func _build_yard() -> void:
 		var p := Vector3(cos(a + PI) * r, 0, sin(a + PI) * r - 2.0)
 		if p.z > 4.0 and absf(p.x) < 3.5:
 			continue
-		var path: String = [GRAVE + "gravestone-cross.glb", GRAVE + "gravestone-round.glb", GRAVE_X + "gravestone-broken.glb",
+		var path: String = [GRAVE + "gravestone-cross.glb", GRAVE + "gravestone-round.glb",
+			GRAVE_X + "gravestone-broken.glb",
 			GRAVE_X + "cross-wood.glb"][i % 4]
 		_solid(path, Vector3(0.8, 1.1, 0.3), p, _rng.randf_range(-0.3, 0.3) + a)
 	for p in [Vector3(-9, 0, 6), Vector3(9.5, 0, -8)]:
