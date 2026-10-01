@@ -1,10 +1,19 @@
 # Credits
 
-Third-party art used in this game. Everything here is CC0 (public domain) unless a row says
-otherwise; each pack folder under `assets/` keeps its original licence file.
+Third-party art used in Mushroom Foraging. Everything here is CC0 (public domain): free for any
+use, credit appreciated but not required. Each pack folder under `assets/` keeps its original
+licence file. Mushrooms, the terrain, water and the trip effects are made in code.
 
 | Asset | From | Licence | Used for | Folder |
 |---|---|---|---|---|
-| Mini Characters (8 characters, idle / walk / sprint) | [Kenney](https://kenney.nl/assets/mini-characters) | CC0 | both games, the players | `assets/kenney/mini-characters/` |
-| Nature Kit (pines, rocks, stump, log, bush, grass) | [Kenney](https://kenney.nl/assets/nature-kit) | CC0 | Mushroom Foraging (forest) | `assets/kenney/nature-kit/` |
-| Car Kit (SUV) | [Kenney](https://kenney.nl/assets/car-kit) | CC0 | Mushroom Foraging (the car) | `assets/kenney/car-kit/` |
+| Mini Characters | [Kenney](https://kenney.nl/assets/mini-characters) | CC0 | the four friends (8 looks, idle / walk / sprint / sit), villagers | `assets/kenney/mini-characters/` |
+| Nature Kit | [Kenney](https://kenney.nl/assets/nature-kit) | CC0 | pines and leafy trees, bushes, ferns, grass, flowers, rocks, logs, stumps, lily pads, canoe, ruin columns, tent | `assets/kenney/nature-kit/` |
+| Car Kit (SUV) | [Kenney](https://kenney.nl/assets/car-kit) | CC0 | the friends' car | `assets/kenney/car-kit/` |
+| Survival Kit | [Kenney](https://kenney.nl/assets/survival-kit) | CC0 | junk camp: campfire, bedrolls, chest, workbench, barrels, crate, signpost | `assets/kenney/survival-kit/` |
+| City Kit (Suburban) | [Kenney](https://kenney.nl/assets/city-kit-suburban) | CC0 | village houses, the house you can build at camp | `assets/kenney/city-kit-suburban/` |
+| City Kit (Commercial) | [Kenney](https://kenney.nl/assets/city-kit-commercial) | CC0 | the casino building and awning | `assets/kenney/city-kit-commercial/` |
+| Fantasy Town Kit | [Kenney](https://kenney.nl/assets/fantasy-town-kit) | CC0 | village fountain, market stalls, cart, lanterns | `assets/kenney/fantasy-town-kit/` |
+| Mini Arcade | [Kenney](https://kenney.nl/assets/mini-arcade) | CC0 | casino slot machines, the old slot machine, vending machine, bouncer | `assets/kenney/mini-arcade/` |
+| Mini Market | [Kenney](https://kenney.nl/assets/mini-market) | CC0 | the basket | `assets/kenney/mini-market/` |
+| Graveyard Kit | [Kenney](https://kenney.nl/assets/graveyard-kit) | CC0 | the witch, her crypt, cauldron, gravestones, crooked pines, candles | `assets/kenney/graveyard-kit/` |
+| Cube Pets | [Kenney](https://kenney.nl/assets/cube-pets) | CC0 | wild boars, deer, bunnies, foxes | `assets/kenney/cube-pets/` |

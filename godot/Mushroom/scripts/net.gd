@@ -10,17 +10,19 @@ const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 8
 
 var player_name := "Crew"
+var port := DEFAULT_PORT  # --port=N on the command line changes it (handy for testing)
 
 
 func _ready() -> void:
 	_setup_input()
+	status_changed.connect(func(text): print("[net] ", text))
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
-func host(port: int = DEFAULT_PORT) -> Error:
+func host() -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
@@ -32,7 +34,7 @@ func host(port: int = DEFAULT_PORT) -> Error:
 	return OK
 
 
-func join(address: String, port: int = DEFAULT_PORT) -> Error:
+func join(address: String) -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, port)
 	if err != OK:
@@ -94,6 +96,12 @@ func _setup_input() -> void:
 	_bind_keys("throw", [KEY_Q])
 	_bind_mouse("throw", MOUSE_BUTTON_RIGHT)
 	_bind_keys("taste", [KEY_F])
+	_bind_keys("flashlight", [KEY_T])
+	_bind_keys("medkit", [KEY_H])
+	_bind_keys("journal", [KEY_J, KEY_TAB])
+	_bind_keys("spin", [KEY_R])
+	_bind_mouse("spin", MOUSE_BUTTON_WHEEL_UP)
+	_bind_mouse("spin_back", MOUSE_BUTTON_WHEEL_DOWN)
 
 
 func _ensure_action(action: String) -> void:

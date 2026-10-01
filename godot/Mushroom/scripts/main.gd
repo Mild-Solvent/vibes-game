@@ -89,6 +89,7 @@ func _ready() -> void:
 
 func _on_host_pressed(player_name: String, mode: int) -> void:
 	Net.player_name = player_name
+	Team.reset()
 	_activate(mode)
 	director.start(mode)
 	if Net.host() == OK:
@@ -106,6 +107,7 @@ func _on_join_pressed(player_name: String, address: String) -> void:
 func _on_player_joined(peer_id: int, player_name: String) -> void:
 	if not multiplayer.is_server():
 		return
+	Team.add_player(peer_id, player_name)
 	var index := _joined_count
 	_joined_count += 1
 	var level: Node3D = levels[director.mode]
@@ -119,6 +121,10 @@ func _on_player_joined(peer_id: int, player_name: String) -> void:
 
 
 func _on_player_left(peer_id: int) -> void:
+	var car := get_tree().get_first_node_in_group("car")
+	if car:
+		car.leave(peer_id)
+	Team.remove_player(peer_id)
 	var player := players_root.get_node_or_null(str(peer_id))
 	if player:
 		player.queue_free()
@@ -164,6 +170,7 @@ func _activate(mode: int) -> void:
 func _handle_command_line() -> void:
 	var host := false
 	var join_address := ""
+	var day_time := -1.0
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--host":
 			host = true
@@ -171,9 +178,20 @@ func _handle_command_line() -> void:
 			join_address = arg.trim_prefix("--join=")
 		elif arg.begins_with("--name="):
 			hud.set_player_name(arg.trim_prefix("--name="))
+		elif arg == "--skip-intro":
+			hud.intro_enabled = false
+		elif arg.begins_with("--spawn="):
+			levels[0].spawn_override = arg.trim_prefix("--spawn=")
+		elif arg.begins_with("--day-time="):
+			day_time = arg.trim_prefix("--day-time=").to_float()
+		elif arg.begins_with("--port="):
+			Net.port = arg.trim_prefix("--port=").to_int()
 		elif arg.begins_with("--show="):
 			hud.set_mode(clampi(arg.trim_prefix("--show=").to_int(), 0, levels.size() - 1))
 	if host:
 		_on_host_pressed(hud.get_player_name(), hud.get_mode())
+		if day_time >= 0.0:  # testing: jump straight into the day at this point (0 morning, 1 midnight)
+			director._enter(1)
+			director.time_left = levels[0].live_duration() * (1.0 - day_time)
 	elif not join_address.is_empty():
 		_on_join_pressed(hud.get_player_name(), join_address)

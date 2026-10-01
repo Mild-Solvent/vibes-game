@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Mushroom Foraging"
-config/description="Fill the basket before dark. Don't eat the wrong one."
+config/description="Four jobless friends, a forest full of weird mushrooms, and a village that pays for the safe ones."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
@@ -23,6 +23,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Net="*res://scripts/net.gd"
+Team="*res://scripts/team.gd"
 
 [display]
 

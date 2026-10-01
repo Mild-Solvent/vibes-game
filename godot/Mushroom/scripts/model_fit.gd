@@ -11,6 +11,7 @@ static func fit(path: String, size: Vector3, yaw := 0.0, stretch := false) -> No
 	var holder := Node3D.new()
 	holder.name = "Model"
 	var model: Node3D = load(path).instantiate()
+	fix_materials(model)
 	model.rotation.y = yaw
 	holder.add_child(model)
 
@@ -23,6 +24,24 @@ static func fit(path: String, size: Vector3, yaw := 0.0, stretch := false) -> No
 	holder.scale = scale
 	holder.position = Vector3(-centre.x * scale.x, -size.y / 2.0 - bounds.position.y * scale.y, -centre.z * scale.z)
 	return holder
+
+
+## Some Kenney packs export fully metallic materials, which turn them into sky-coloured mirrors.
+## Make every material in the model matte (the materials are shared, so this fixes them everywhere).
+static func fix_materials(node: Node) -> void:
+	for mesh_instance in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = mesh_instance.mesh
+		if mesh == null:
+			continue
+		for i in mesh.get_surface_count():
+			var mat := mesh.surface_get_material(i) as StandardMaterial3D
+			if mat and mat.metallic > 0.0:
+				mat.metallic = 0.0
+				mat.roughness = 1.0
+				# Their leaf colour imports as mint; push it towards forest green.
+				var c := mat.albedo_color
+				if c.g > c.r * 1.4 and c.b > c.g * 0.6:
+					mat.albedo_color = Color(c.r * 0.55, c.g * 0.72, c.b * 0.38)
 
 
 ## The model's bounding box in its parent's space, before scaling.
