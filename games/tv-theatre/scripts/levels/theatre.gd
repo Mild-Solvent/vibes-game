@@ -68,9 +68,7 @@ func _ready() -> void:
 		_pieces.append(piece)
 	_prop("SKULL", Vector3(0.2, 0.22, 0.24), Color(0.95, 0.93, 0.85), 0.5, Vector3(7.5, STAGE_TOP + 1.0, -4.5))
 	_prop("SWORD", Vector3(0.08, 0.08, 1.1), Color(0.8, 0.8, 0.85), 1.0, Vector3(7.5, STAGE_TOP + 1.0, -5.5))
-	var fog := Vector3(0.6, 0.4, 0.5)
-	var fog_machine := _prop("FOG_MACHINE", fog, Color(0.2, 0.2, 0.2), 4.0, Vector3(-7.5, STAGE_TOP + 0.3, -8.0))
-	_dress(fog_machine, KENNEY + "furniture-kit/speaker.glb", fog, PI / 2.0)
+	_prop("FOG_MACHINE", Vector3(0.6, 0.4, 0.5), Color(0.2, 0.2, 0.2), 4.0, Vector3(-7.5, STAGE_TOP + 0.3, -8.0))
 	apply_state(Phase.PREP, Event.NONE, 0, 0.0)
 
 
