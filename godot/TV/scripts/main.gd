@@ -72,9 +72,11 @@ func _ready() -> void:
 	hud = HudScript.new()
 	add_child(hud)
 	var titles := []
+	var rules := []
 	for level in levels:
 		titles.append(level.title())
-	hud.set_levels(titles)
+		rules.append(level.rules_text())
+	hud.set_levels(titles, rules)
 
 	hud.host_pressed.connect(_on_host_pressed)
 	hud.join_pressed.connect(_on_join_pressed)
@@ -172,6 +174,8 @@ func _handle_command_line() -> void:
 			join_address = arg.trim_prefix("--join=")
 		elif arg.begins_with("--name="):
 			hud.set_player_name(arg.trim_prefix("--name="))
+		elif arg == "--rules":
+			hud.show_rules()
 		elif arg.begins_with("--show="):
 			hud.set_mode(clampi(arg.trim_prefix("--show=").to_int(), 0, levels.size() - 1))
 	if host:

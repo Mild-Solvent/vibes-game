@@ -77,6 +77,11 @@ func event_text(_event: int) -> String:
 	return ""
 
 
+## The show's tab in the menu's RULES screen (BBCode): roles, goal, show-specific controls.
+func rules_text() -> String:
+	return ""
+
+
 ## Extra help shown in the corner of the HUD for this level.
 func guide_text() -> String:
 	return ""

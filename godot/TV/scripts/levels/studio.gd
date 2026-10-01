@@ -101,6 +101,20 @@ func phase_text(phase: int, clock: String, score: float, _sub: int) -> String:
 	return "WRAP  -  final ratings %d%%" % int(score)
 
 
+func rules_text() -> String:
+	return """[b]WE'RE LIVE![/b]   Channel 6 Evening News. Three minutes, live, no second takes.
+
+[b]ROLES[/b]
+ - [b]Anchor[/b]: stands on the green tape behind the news desk and reads the news.
+ - [b]Crew[/b]: everyone else. Stay behind the yellow floor tape: that is the edge of the shot.
+
+[b]GOAL[/b]: keep the RATINGS up for the whole show.
+ - One anchor at the desk and nobody else in frame: ratings climb.
+ - Nobody at the desk: dead air. Crew walking into the shot: ratings drain.
+
+[b]CONTROLS[/b]: E / left click grab props (tapes, boxes, coffee), Q throws them."""
+
+
 func event_text(event: int) -> String:
 	match event:
 		Event.DEAD_AIR:

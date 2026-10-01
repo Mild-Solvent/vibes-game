@@ -4,22 +4,19 @@ extends CanvasLayer
 signal host_pressed(player_name: String, mode: int)
 signal join_pressed(player_name: String, address: String)
 
-const TRIP_SECONDS := 25.0
-const TRIP_SHADER := """
-shader_type canvas_item;
-uniform sampler2D screen_tex : hint_screen_texture;
-uniform float strength = 0.0;
-void fragment() {
-	vec2 uv = SCREEN_UV;
-	uv.x += sin(uv.y * 14.0 + TIME * 2.3) * 0.012 * strength;
-	uv.y += cos(uv.x * 11.0 + TIME * 1.7) * 0.012 * strength;
-	vec3 c = texture(screen_tex, uv).rgb;
-	vec3 ghost = texture(screen_tex, uv + vec2(sin(TIME) * 0.02, cos(TIME * 0.7) * 0.02) * strength).rgb;
-	float t = sin(TIME * 0.9) * 0.5 + 0.5;
-	vec3 hue = mix(c.gbr, c.brg, t);
-	COLOR = vec4(mix(c, mix(hue, ghost, 0.35), strength), 1.0);
-}
-"""
+const GENERAL_RULES := """[b]STANDBY... GO![/b]   Everyone's watching. Nobody's ready.
+
+You are the crew of a live show. Every round goes [b]PREP[/b] (get in position) -> [b]LIVE[/b] (the show
+runs and the meter moves) -> [b]WRAP[/b] (final score), then the next round starts.
+The host picks the show in the menu; everyone else joins the host's IP.
+
+[b]CONTROLS (every show)[/b]
+ - WASD / arrows: walk.  Shift: sprint.  Space: jump.  Mouse: look.
+ - E: use the thing you look at (sit at a desk, take a camera) or grab / drop a prop.
+ - Left click: grab / drop.  Q or right click: throw what you hold.
+ - Esc: leave a seat, or free the mouse (click the game to recapture it).
+
+Each show has its own tab with the roles, the goal and its extra controls."""
 
 var _menu: Control
 var _game: Control
@@ -33,8 +30,11 @@ var _score: ProgressBar
 var _event_label: Label
 var _guide: Label
 var _toast: Label
-var _trip_rect: ColorRect
-var _trip_left := 0.0
+var _prompt: Label
+var _help: Label
+var _rules_panel: Control
+var _menu_center: Control
+var _rules_tabs: TabContainer
 var _toast_left := 0.0
 
 
@@ -46,20 +46,23 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _trip_left > 0.0:
-		_trip_left -= delta
-		var strength := clampf(_trip_left / 4.0, 0.0, 1.0)  # fades out over the last 4 s
-		_trip_rect.visible = _trip_left > 0.0
-		(_trip_rect.material as ShaderMaterial).set_shader_parameter("strength", strength)
 	if _toast_left > 0.0:
 		_toast_left -= delta
 		_toast.visible = _toast_left > 0.0
 
 
-func set_levels(titles: Array) -> void:
+## `titles` and `rules` are parallel arrays, one entry per level (show).
+func set_levels(titles: Array, rules: Array = []) -> void:
 	_mode_select.clear()
 	for t in titles:
 		_mode_select.add_item(t)
+	for child in _rules_tabs.get_children():
+		if child.name != "General":
+			child.queue_free()
+	for i in rules.size():
+		var page := _rules_page(rules[i])
+		page.name = str(titles[i]).get_slice(" (", 0)
+		_rules_tabs.add_child(page)
 
 
 func show_menu() -> void:
@@ -101,19 +104,25 @@ func update_state(phase_text: String, score_name: String, score: float, event_te
 	_guide.text = guide
 
 
-## Called through the "hud" group when this player tasted a mushroom.
-func on_tasted(edible: bool, mushroom_name: String) -> void:
-	if edible:
-		_show_toast("Mmm. %s. Tasty, and you're fine." % mushroom_name)
-	else:
-		_show_toast("That was a %s..." % mushroom_name)
-		_trip_left = TRIP_SECONDS
+## What pressing E would do right now (empty hides it). Set every frame by the local player.
+func set_prompt(text: String) -> void:
+	_prompt.text = text
 
 
-func _show_toast(text: String) -> void:
+## Bottom-left key help; levels and seats change it.
+func set_help(text: String) -> void:
+	_help.text = text
+
+
+func show_toast(text: String, seconds := 4.0) -> void:
 	_toast.text = text
 	_toast.visible = true
-	_toast_left = 4.0
+	_toast_left = seconds
+
+
+func show_rules(open := true) -> void:
+	_rules_panel.visible = open
+	_menu_center.visible = not open
 
 
 func _build_menu() -> void:
@@ -129,6 +138,7 @@ func _build_menu() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_menu.add_child(center)
+	_menu_center = center
 
 	var box := VBoxContainer.new()
 	box.custom_minimum_size = Vector2(440, 0)
@@ -167,12 +177,54 @@ func _build_menu() -> void:
 	join_button.pressed.connect(func(): join_pressed.emit(_name_edit.text, _address_edit.text.strip_edges()))
 	buttons.add_child(join_button)
 
+	var rules_button := Button.new()
+	rules_button.text = "RULES & CONTROLS"
+	rules_button.pressed.connect(show_rules)
+	box.add_child(rules_button)
+
 	_status = _label("", 16)
 	box.add_child(_status)
-	var controls := "WASD move · Shift sprint · Space jump\n"
-	controls += "E / left click grab & drop · Q / right click throw · F taste\n"
-	controls += "Esc frees the mouse, click to recapture"
-	box.add_child(_label(controls, 14))
+
+	_build_rules()
+
+
+## A full-screen panel with one tab of rules per show, opened from the menu.
+func _build_rules() -> void:
+	_rules_panel = PanelContainer.new()
+	_rules_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 40)
+	_rules_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.08, 0.12, 0.97)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(24)
+	_rules_panel.add_theme_stylebox_override("panel", style)
+	_menu.add_child(_rules_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	_rules_panel.add_child(box)
+	box.add_child(_label("RULES", 32))
+	_rules_tabs = TabContainer.new()
+	_rules_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(_rules_tabs)
+	var general := _rules_page(GENERAL_RULES)
+	general.name = "General"
+	_rules_tabs.add_child(general)
+	var close := Button.new()
+	close.text = "Back"
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.custom_minimum_size = Vector2(200, 0)
+	close.pressed.connect(show_rules.bind(false))
+	box.add_child(close)
+
+
+func _rules_page(bbcode: String) -> RichTextLabel:
+	var text := RichTextLabel.new()
+	text.bbcode_enabled = true
+	text.text = bbcode
+	text.add_theme_font_size_override("normal_font_size", 17)
+	text.add_theme_font_size_override("bold_font_size", 18)
+	text.add_theme_constant_override("line_separation", 3)
+	return text
 
 
 func _build_game() -> void:
@@ -180,17 +232,6 @@ func _build_game() -> void:
 	_game.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_game.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_game)
-
-	_trip_rect = ColorRect.new()
-	_trip_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_trip_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var shader := Shader.new()
-	shader.code = TRIP_SHADER
-	var mat := ShaderMaterial.new()
-	mat.shader = shader
-	_trip_rect.material = mat
-	_trip_rect.visible = false
-	_game.add_child(_trip_rect)
 
 	var top := VBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -231,10 +272,19 @@ func _build_game() -> void:
 	_game.add_child(crosshair_holder)
 	crosshair_holder.add_child(_label("+", 22))
 
-	var help := _label("E grab · Q throw · F taste · Esc mouse", 14, HORIZONTAL_ALIGNMENT_LEFT)
-	help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
-	help.modulate = Color(1, 1, 1, 0.6)
-	_game.add_child(help)
+	_prompt = _label("", 18)
+	_prompt.set_anchors_preset(Control.PRESET_CENTER)
+	_prompt.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_prompt.position.y += 28
+	_prompt.modulate = Color(1, 1, 0.7)
+	_prompt.add_theme_constant_override("outline_size", 6)
+	_game.add_child(_prompt)
+
+	_help = _label("E use / grab · Q throw · Esc mouse", 14, HORIZONTAL_ALIGNMENT_LEFT)
+	_help.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
+	_help.modulate = Color(1, 1, 1, 0.6)
+	_game.add_child(_help)
 
 	_guide = _label("", 13, HORIZONTAL_ALIGNMENT_RIGHT)
 	_guide.grow_horizontal = Control.GROW_DIRECTION_BEGIN

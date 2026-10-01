@@ -196,6 +196,23 @@ func phase_text(phase: int, clock: String, score: float, sub: int) -> String:
 	return "CURTAIN CALL  -  applause %d" % int(score)
 
 
+func rules_text() -> String:
+	return """[b]PLACES, PLEASE![/b]   Opening night. The audience can hear everything.
+
+[b]ROLES[/b]
+ - [b]Actor[/b]: stands alone on the yellow STAR in the middle of the stage while the lights are up.
+ - [b]Deck crew[/b]: everyone else. Hide in the wings (left and right of the red proscenium).
+   In each BLACKOUT, carry the TREE, CASTLE_WALL and THRONE onto their glowing marks.
+
+[b]GOAL[/b]: keep the APPLAUSE meter up through 3 scenes and 2 blackouts.
+ - Actor alone on the STAR in the light: applause rises.
+ - Empty STAR, or crew caught in the light (the stage between the wings): applause drops.
+ - When the lights come up after a blackout: +6 per set piece on its mark, -8 per piece off it.
+
+[b]CONTROLS[/b]: E / left click grab a set piece, walk it over, E to drop. Q throws (please don't).
+The monitors in the wings show what the audience sees."""
+
+
 func event_text(event: int) -> String:
 	match event:
 		Event.EMPTY_STAGE:
