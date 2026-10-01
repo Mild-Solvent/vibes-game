@@ -61,6 +61,7 @@ var _spook_in := 5.0
 var _step := 0.0
 var _pond_nag := 30.0
 var noclip := false  # cheat: fly through everything
+var _alive_for := 0.0  # seconds since spawning: no fall damage in the first few (joining, loading)
 var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
 var _beam: MeshInstance3D
 # Inspecting a held mushroom up close (local only): a detailed copy in front of the camera.
@@ -77,9 +78,11 @@ func setup(id: int, player_name: String, body_color: Color, character := 0) -> v
 	display_name = player_name
 	color = body_color
 	name = str(id)
-	set_multiplayer_authority(id)
 	add_to_group("players")
 	_build()
+	# After _build: the authority has to reach the Sync node too (it only applies to existing
+	# children). Otherwise the host owns every player's sync and pins joiners in place.
+	set_multiplayer_authority(id)
 
 
 func _ready() -> void:
@@ -207,7 +210,8 @@ func _physics_process(delta: float) -> void:
 	var falling := -velocity.y
 	var was_on_floor := is_on_floor()
 	move_and_slide()
-	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and not swimming:
+	_alive_for += delta
+	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and not swimming and _alive_for > 4.0:
 		Team.request_die.rpc_id(1, "falling from a great height")
 	elif is_on_floor() and not was_on_floor and _fall_speed > 6.0:
 		Sfx.play_all("jump_land", global_position)

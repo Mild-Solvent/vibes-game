@@ -119,6 +119,8 @@ func _on_menu_join(player_name: String, address: String, port: int) -> void:
 func _on_lobby_started() -> void:
 	if multiplayer.is_server() and not director.running:
 		director.start(0)
+	if menu.in_game:
+		return  # already playing (the lobby re-announces the start to late joiners)
 	hud.show_game()
 	menu.in_game = true
 	menu.hide_all()

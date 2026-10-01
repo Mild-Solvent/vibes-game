@@ -42,9 +42,11 @@ func setup(id: int, player_name: String, body_color: Color, character := 0) -> v
 	display_name = player_name
 	color = body_color
 	name = str(id)
-	set_multiplayer_authority(id)
 	add_to_group("players")
 	_build()
+	# After _build: the authority has to reach the Sync node too (it only applies to existing
+	# children). Otherwise the host owns every player's sync and pins joiners in place.
+	set_multiplayer_authority(id)
 
 
 func _ready() -> void:
