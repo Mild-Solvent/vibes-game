@@ -1,0 +1,6 @@
+# Normalize EOL for all text files
+* text=auto eol=lf
+*.png binary
+*.glb binary
+*.wav binary
+*.ogg binary
