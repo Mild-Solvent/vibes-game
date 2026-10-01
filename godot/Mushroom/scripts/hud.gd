@@ -94,6 +94,7 @@ var _highlights: Array[Dictionary] = []
 var _phase := -1
 var menu: CanvasLayer  # the real menu (scripts/ui/menu.gd), set by main
 var _cheat_panel: Control
+var _net_debug: Label  # F3: where the voice delay sits
 var _post: ColorRect
 var _inspecting := false
 var _cheat_tag: Label
@@ -113,6 +114,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _net_debug and _net_debug.visible:
+		_net_debug.text = "%d fps\n%s" % [Engine.get_frames_per_second(), Voice.debug_line()]
 	if _toast_left > 0.0:
 		_toast_left -= delta
 		_toast.visible = _toast_left > 0.0
@@ -133,6 +136,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F1 \
 			and _game.visible:
 		_cheat_panel.toggle()
+	elif event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
+		if _net_debug == null:
+			_net_debug = Label.new()
+			_net_debug.position = Vector2(12, 12)
+			_net_debug.add_theme_font_size_override("font_size", 16)
+			_net_debug.add_theme_constant_override("outline_size", 6)
+			_net_debug.add_theme_color_override("font_outline_color", Color.BLACK)
+			_net_debug.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_net_debug.visible = false
+			add_child(_net_debug)
+		_net_debug.visible = not _net_debug.visible
 	elif event.is_action_pressed("journal"):
 		var me := _local_player()
 		if me and me.holding_guide():

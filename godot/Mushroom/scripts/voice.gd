@@ -3,7 +3,7 @@ extends Node
 ##
 ## Capture: the mic plays on a muted "VoiceMic" bus whose AudioEffectCapture is drained every
 ## frame, box-filtered down to 16 kHz mono, noise-gated (silence is never sent) and cut into
-## 40 ms frames of 8-bit mu-law (~16 KB/s per talker). Frames go to every peer as unreliable_ordered
+## 20 ms frames of 8-bit mu-law (~16 KB/s per talker). Frames go to every peer as unreliable_ordered
 ## RPCs on their own channel; a client's frames are relayed by the host, which also turns every
 ## talker's loudness into Noise for the monsters.
 ## Playback: an AudioStreamPlayer3D + generator on each friend's Head (audible to ~28 m), and, for
@@ -22,9 +22,12 @@ const Codec := preload("res://scripts/voice/codec.gd")
 const Synth := preload("res://scripts/voice/synth.gd")
 
 const RATE := 16000
-const FRAME := 640  # samples per packet: 40 ms, 25 packets/s
+const FRAME := 320  # samples per packet: 20 ms, 50 packets/s (smaller = less delay)
 const GATE_DB := -40.0  # frames quieter than this are silence
-const JITTER_MAX_S := 0.18  # never let more than this much voice queue up (it's latency)
+# Latency budget on the receiving end. Every queued sample is delay, so keep the queue short:
+const JITTER_START_S := 0.04  # cushion at the start of a burst (or after running dry)
+const JITTER_HIGH_S := 0.10  # above this, incoming frames are skipped until it drains back
+const JITTER_MAX_S := 0.20  # above this, the queue is thrown away
 const AGC_TARGET := 0.35  # incoming voice is levelled towards this RMS...
 const AGC_MAX_GAIN := 6.0  # ...but quiet mics are boosted at most this much
 const GATE_HOLD := 0.35  # keep sending this long after the voice drops (word endings)
@@ -67,7 +70,8 @@ var _map := {}
 var _map_frame := -1
 var _noise_timer := 0.0
 var _debug_timer := 0.0
-var _stats := {"sent": 0, "recv": 0, "noise": 0, "walkie": 0}
+var _stats := {"sent": 0, "recv": 0, "noise": 0, "walkie": 0, "skipped": 0, "cleared": 0,
+	"queued_ms": 0.0, "age_ms": 0.0, "mic_ms": 0.0}
 
 
 func _ready() -> void:
@@ -155,8 +159,9 @@ func _process(delta: float) -> void:
 		_debug_timer += delta
 		if _debug_timer >= 5.0:
 			_debug_timer = 0.0
-			print("[voice] me=%d sent=%d recv=%d noise=%d walkie_rx=%d" % [
-				me, _stats["sent"], _stats["recv"], _stats["noise"], _stats["walkie"]
+			print("[voice] me=%d sent=%d recv=%d noise=%d walkie_rx=%d queue=%.0fms age=%.0fms skip=%d clear=%d" % [
+				me, _stats["sent"], _stats["recv"], _stats["noise"], _stats["walkie"], _stats["queued_ms"],
+				_stats["age_ms"], _stats["skipped"], _stats["cleared"]
 			])
 
 
@@ -186,6 +191,7 @@ func _read_input(delta: float) -> void:
 	if _capture == null or _mic_player == null:
 		return
 	var avail := _capture.get_frames_available()
+	_stats["mic_ms"] = 1000.0 * avail / AudioServer.get_mix_rate()
 	if avail <= 0:
 		return
 	for f in _capture.get_buffer(avail):
@@ -218,7 +224,9 @@ func _send_frames(me: int, now: float) -> void:
 			_record(me, frame)
 		if multiplayer.get_peers().is_empty():
 			continue
-		var packet := PackedByteArray([FLAG_WALKIE if transmitting else 0, int(level * 255.0)])
+		var stamp := _wall_ms() & 0xFFFF
+		var packet := PackedByteArray([FLAG_WALKIE if transmitting else 0, int(level * 255.0),
+			stamp & 0xFF, stamp >> 8])
 		packet.append_array(Codec.encode(frame))
 		_voice_frame.rpc(packet)
 		_stats["sent"] += 1
@@ -257,11 +265,14 @@ func _fake_sample(t: float) -> float:
 @rpc("any_peer", "call_remote", "unreliable_ordered", 2)
 func _voice_frame(packet: PackedByteArray) -> void:
 	var sender := multiplayer.get_remote_sender_id()
-	if packet.size() < 3 or packet.size() > FRAME + 2 or sender == multiplayer.get_unique_id():
+	if packet.size() < 5 or packet.size() > FRAME + 4 or sender == multiplayer.get_unique_id():
 		return
 	_stats["recv"] += 1
+	# Sender's clock: only meaningful when both run on one machine (the latency test).
+	var age := ((_wall_ms() & 0xFFFF) - (packet[2] | packet[3] << 8)) & 0xFFFF
+	_stats["age_ms"] = lerpf(_stats["age_ms"], float(age), 0.1)
 	var now := _now()
-	var samples := Codec.decode(packet, 2)
+	var samples := Codec.decode(packet, 4)
 	_note_level(sender, packet[1] / 255.0, now)
 	samples = _level_up(sender, samples)
 	if Codec.rms(samples) > db_to_linear(GATE_DB):
@@ -377,15 +388,24 @@ func _push(player: Node, samples: PackedFloat32Array, st: Dictionary, key: Strin
 	var pb := player.call("get_stream_playback") as AudioStreamGeneratorPlayback
 	if pb == null:
 		return
-	# Keep latency flat: if more than ~0.18 s is already queued (jitter, a hitch, clock drift),
-	# throw the backlog away instead of letting the delay creep up sentence after sentence.
-	var queued := int(RATE * JITTER_MAX_S * 3.0) - pb.get_frames_available()
+	# Godot rounds the generator's buffer up to a power of two, so measure its real size once
+	# (while it's empty) instead of trusting buffer_length.
+	var cap_key := key + "_cap"
+	if not st.has(cap_key):
+		st[cap_key] = pb.get_frames_available()
+	var queued: int = int(st[cap_key]) - pb.get_frames_available()
+	_stats["queued_ms"] = 1000.0 * queued / RATE
 	if queued > int(RATE * JITTER_MAX_S):
-		pb.clear_buffer()
+		pb.clear_buffer()  # way behind (a hitch): jump back to live
 		queued = 0
-	if now - float(st[key]) > 0.3 and queued == 0:  # a new burst: a small cushion against jitter
+		_stats["cleared"] += 1
+	elif queued > int(RATE * JITTER_HIGH_S):
+		_stats["skipped"] += 1  # a bit behind (clock drift, a burst): drop this 20 ms to catch up
+		st[key] = now
+		return
+	if queued < FRAME / 2:  # a new burst, or we ran dry: a small cushion against jitter
 		var gap := PackedVector2Array()
-		gap.resize(int(RATE * 0.05))  # 50 ms
+		gap.resize(int(RATE * JITTER_START_S))
 		if pb.can_push_buffer(gap.size()):
 			pb.push_buffer(gap)
 	st[key] = now
@@ -395,6 +415,21 @@ func _push(player: Node, samples: PackedFloat32Array, st: Dictionary, key: Strin
 		frames[i] = Vector2(samples[i], samples[i])
 	if pb.can_push_buffer(frames.size()):
 		pb.push_buffer(frames)
+
+
+## One line for the debug overlay (F3): how much delay sits where.
+func debug_line() -> String:
+	var rtt := -1
+	var mp := multiplayer.multiplayer_peer
+	if mp is ENetMultiplayerPeer and _connected():
+		var target := 1 if not multiplayer.is_server() else (multiplayer.get_peers()[0] if not multiplayer.get_peers().is_empty() else 0)
+		if target != 0:
+			var pr := (mp as ENetMultiplayerPeer).get_peer(target)
+			if pr:
+				rtt = int(pr.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
+	return "voice: ping %d ms · mic backlog %d ms · play queue %d ms · sent %d recv %d skip %d clear %d" % [
+		rtt, _stats["mic_ms"], _stats["queued_ms"], _stats["sent"], _stats["recv"], _stats["skipped"],
+		_stats["cleared"]]
 
 
 # --- per-frame playback and noise -------------------------------------------------
@@ -561,7 +596,7 @@ func _free_later(node: Node, seconds: float) -> void:
 func _generator() -> AudioStreamGenerator:
 	var g := AudioStreamGenerator.new()
 	g.mix_rate = RATE
-	g.buffer_length = JITTER_MAX_S * 3.0
+	g.buffer_length = JITTER_MAX_S * 1.5
 	return g
 
 
@@ -671,7 +706,7 @@ func _bind(action: String, key: Key) -> void:
 ## Runtime buses: VoiceMic (muted, capture), Voice (proximity), Walkie (radio), VoiceFx (reverb).
 func _setup_buses() -> void:
 	var capture := AudioEffectCapture.new()
-	capture.buffer_length = 0.5
+	capture.buffer_length = 0.2  # drained every frame; only a long hitch fills it
 	var mic := _bus("VoiceMic", [capture])
 	AudioServer.set_bus_mute(mic, true)
 	for i in AudioServer.get_bus_effect_count(mic):
@@ -706,3 +741,8 @@ func _bus(bus_name: String, effects: Array) -> int:
 	for fx in effects:
 		AudioServer.add_bus_effect(i, fx)
 	return i
+
+
+## Wall-clock milliseconds: comparable between two copies of the game on one machine.
+func _wall_ms() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
