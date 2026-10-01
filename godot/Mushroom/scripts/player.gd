@@ -61,6 +61,8 @@ var _spook_in := 5.0
 var _step := 0.0
 var _pond_nag := 30.0
 var noclip := false  # cheat: fly through everything
+var _holding := false
+var _holding_checked := 0
 var _alive_for := 0.0  # seconds since spawning: no fall damage in the first few (joining, loading)
 var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
 var _beam: MeshInstance3D
@@ -93,8 +95,11 @@ func _ready() -> void:
 	camera.cull_mask &= ~LOCAL_ONLY_LAYER
 	for visual in _visuals:
 		visual.layers = LOCAL_ONLY_LAYER
+	# You see your own body when you look down; only your head is hidden from your own camera.
 	for visual in _model.find_children("*", "VisualInstance3D", true, false):
-		visual.layers = LOCAL_ONLY_LAYER
+		if String(visual.name).to_lower().begins_with("head"):
+			visual.layers = LOCAL_ONLY_LAYER
+	camera.position.z = -0.12  # eyes at the front of the face, not inside the skull
 	for visual in _monster.find_children("*", "VisualInstance3D", true, false):
 		visual.layers = LOCAL_ONLY_LAYER
 	if not _menu_open():
@@ -127,6 +132,19 @@ func held() -> Node:
 	return _held if is_instance_valid(_held) and not _held.removed and _held.holder_id == peer_id else null
 
 
+## Every peer: is this player carrying something (for the arms-out pose)?
+func _held_by_me() -> bool:
+	var now := Time.get_ticks_msec()
+	if now - _holding_checked > 300:
+		_holding_checked = now
+		_holding = false
+		for prop in get_tree().get_nodes_in_group("props"):
+			if prop.holder_id == peer_id and not prop.removed:
+				_holding = true
+				break
+	return _holding
+
+
 func holding_guide() -> bool:
 	return held() is FieldGuideScript
 
@@ -156,7 +174,7 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = 0.0
 		_update_torch(delta)
 		return
-	camera.position = Vector3.ZERO
+	camera.position = Vector3(0, 0, -0.12)
 	_car_look = 0.0
 
 	if s == Team.Status.DEAD or noclip:
@@ -687,7 +705,7 @@ func _build() -> void:
 	var players := _model.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
 		_anim = players[0]
-		for anim_name in ["idle", "walk", "sprint", "sit", "die"]:
+		for anim_name in ["idle", "walk", "sprint", "sit", "die", "holding-both"]:
 			if _anim.has_animation(anim_name):
 				_anim.get_animation(anim_name).loop_mode = (
 					Animation.LOOP_NONE if anim_name == "die" else Animation.LOOP_LINEAR
@@ -790,5 +808,7 @@ func _process(delta: float) -> void:
 		wanted = "sprint"
 	elif speed > 0.5:
 		wanted = "walk"
+	if wanted == "idle" and _held_by_me():
+		wanted = "holding-both"
 	if _anim.current_animation != wanted and _anim.has_animation(wanted):
 		_anim.play(wanted, 0.15)
