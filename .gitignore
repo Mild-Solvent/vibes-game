@@ -1,14 +1,11 @@
-# Godot 4
+# Godot
 .godot/
-android/
-build/
 *.tmp
 export_presets.cfg
+/godot/*/build/
+# The Godot editor lives here locally; it's not committed
+/godot/engine/*
+!/godot/engine/.gitkeep
 # OS
 .DS_Store
 Thumbs.db
-# Portable engine (downloaded by tools/launcher.ps1)
-/engine/*
-!/engine/README.md
-# shared/ is linked into each game by tools/launcher.ps1
-/games/*/shared
