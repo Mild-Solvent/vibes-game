@@ -299,7 +299,9 @@ func event_text(event: int) -> String:
 
 
 func guide_text() -> String:
-	return "E at CONTROL: TAKE cameras, REC, teleprompter\nE at a CAM: operate it\nFIELD CAM by the EXIT: take it outside"
+	var guide := "E at CONTROL: TAKE cameras, REC, teleprompter"
+	guide += "\nE at a CAM: operate it"
+	return guide + "\nFIELD CAM by the EXIT: take it outside"
 
 
 ## Every peer: the lower third, ticker and a HUD toast for the breaking story (or the usual news).
@@ -473,7 +475,8 @@ func _build_set() -> void:
 	add_child(logo)
 
 	var news_desk := Vector3(3, 0.7, 0.8)
-	_dress(_box(news_desk, Vector3(0, 0.35, -4.2), Color(0.75, 0.75, 0.8)), FURNITURE + "desk.glb", news_desk, 0.0, true)
+	var desk := _box(news_desk, Vector3(0, 0.35, -4.2), Color(0.75, 0.75, 0.8))
+	_dress(desk, FURNITURE + "desk.glb", news_desk, 0.0, true)
 	_box(Vector3(3.1, 0.06, 0.9), Vector3(0, 0.73, -4.2), Color(0.1, 0.2, 0.45))
 	_tape_rect(DESK_ZONE, Color(0.2, 0.9, 0.4))
 
@@ -486,7 +489,7 @@ func _build_set() -> void:
 
 	# Teleprompter: a screen on a stand facing the anchor; shows what the prompter op types.
 	# It stands beside CAM 1, out of every camera's default shot.
-	var prompter_pos := Vector3(-1.4, 1.55, 0.7)
+	var prompter_pos := Vector3(-2.3, 1.45, 0.7)
 	_box(Vector3(0.08, 1.1, 0.08), Vector3(prompter_pos.x, 0.55, prompter_pos.z), Color(0.15, 0.15, 0.15))
 	var screen := _box(Vector3(1.5, 0.85, 0.08), prompter_pos, Color(0.08, 0.08, 0.1), false)
 	screen.look_at_from_position(prompter_pos, prompter_pos * 2.0 - ANCHOR_SPOT)
@@ -556,8 +559,8 @@ func _build_broadcast() -> void:
 
 	var feed := broadcast.texture()
 	_monitor(feed, Vector3(0, 2.4, 9.95), Vector2(4.8, 2.7), Vector3(0, 2.4, 0))
-	_box(Vector3(0.1, 1.1, 0.1), Vector3(1.4, 0.55, 0.7), Color(0.15, 0.15, 0.15))
-	_monitor(feed, Vector3(1.4, 1.5, 0.7), Vector2(1.4, 0.79), ANCHOR_SPOT)
+	_box(Vector3(0.1, 1.1, 0.1), Vector3(2.3, 0.55, 0.7), Color(0.15, 0.15, 0.15))
+	_monitor(feed, Vector3(2.3, 1.45, 0.7), Vector2(1.4, 0.79), ANCHOR_SPOT)
 	_monitor(feed, Vector3(6, 1.75, 6.75), Vector2(1.6, 0.9), Vector3(6, 1.75, 4))
 	_show_state(take, recording, subtitle)
 	apply_state(Phase.PREP, Event.NONE, 0, 0.0)
@@ -578,7 +581,8 @@ func _build_props() -> void:
 	var anchor_chair := _prop("ANCHOR_CHAIR", chair, Color(0.15, 0.15, 0.2), 6.0, Vector3(0.8, 0.5, -5.6), false)
 	_dress(anchor_chair, FURNITURE + "chairDesk.glb", chair)
 	var cup := Vector3(0.12, 0.09, 0.14)
-	_dress(_prop("COFFEE", cup, Color.WHITE, 0.3, Vector3(0.6, 1.2, -4.2), false), "res://assets/kenney/food-kit/cup-coffee.glb", cup)
+	var coffee := _prop("COFFEE", cup, Color.WHITE, 0.3, Vector3(0.6, 1.2, -4.2), false)
+	_dress(coffee, "res://assets/kenney/food-kit/cup-coffee.glb", cup)
 	var cone := Vector3(0.35, 0.55, 0.35)
 	var traffic_cone := _prop("TRAFFIC_CONE", cone, Color(1, 0.45, 0.1), 1.0, Vector3(6.5, 0.4, 3.5), false)
 	_dress(traffic_cone, "res://assets/kenney/car-kit/cone.glb", cone)

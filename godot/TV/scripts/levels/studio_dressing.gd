@@ -155,12 +155,14 @@ func _tv_wall() -> void:
 
 func _studio_props() -> void:
 	# On and around the props table.
-	_stupid("POTATO", "res://assets/kaylousberg/potato.glb", Vector3(0.16, 0.2, 0.16), 0.3, Vector3(-6.6, 1.2, 5.8))
-	_stupid("ANOTHER_POTATO", "res://assets/kaylousberg/potato.glb", Vector3(0.14, 0.18, 0.14), 0.3, Vector3(-6.4, 1.2, 6.2))
+	var potato := "res://assets/kaylousberg/potato.glb"
+	_stupid("POTATO", potato, Vector3(0.16, 0.2, 0.16), 0.3, Vector3(-6.6, 1.2, 5.8))
+	_stupid("ANOTHER_POTATO", potato, Vector3(0.14, 0.18, 0.14), 0.3, Vector3(-6.4, 1.2, 6.2))
 	_brick("BRICK", Vector3(-5.4, 1.2, 5.8))
 	_stupid("CAR_TIRE", K + "car-kit/wheel-default.glb", Vector3(0.45, 0.7, 0.7), 8.0, Vector3(-8.0, 0.4, 6.8))
 	_stupid("SPARE_TIRE", K + "car-kit/debris-tire.glb", Vector3(0.4, 0.65, 0.65), 7.0, Vector3(-8.6, 0.4, 7.4))
-	_stupid("SHOPPING_CART", K + "mini-market/shopping-cart.glb", Vector3(0.7, 0.95, 1.1), 10.0, Vector3(-9.5, 0.6, 8.2))
+	var cart := K + "mini-market/shopping-cart.glb"
+	_stupid("SHOPPING_CART", cart, Vector3(0.7, 0.95, 1.1), 10.0, Vector3(-9.5, 0.6, 8.2))
 	_stupid("WATERMELON", FOOD + "watermelon.glb", Vector3(0.35, 0.36, 0.35), 4.0, Vector3(-7.0, 1.2, 6.0))
 	_stupid("FISH", FOOD + "fish.glb", Vector3(0.18, 0.28, 0.55), 1.0, Vector3(-5.0, 1.2, 5.9))
 	_stupid("BARREL", K + "survival-kit/barrel.glb", Vector3(0.55, 0.8, 0.55), 12.0, Vector3(-10.6, 0.5, 4.6))
