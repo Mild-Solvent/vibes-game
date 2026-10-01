@@ -512,8 +512,8 @@ func _build_cart() -> void:
 	_slab(Vector3(-0.8, YOFF, 9.6), Vector3(0.8, 0.7, 9.9), _m["wood"])
 	_cart = CartScript.new()
 	_cart.blocked = _rails_blocked
-	_root.add_child(_cart)
 	_cart.build(Vector3(0, YOFF, 8.0), Vector3(0, YOFF, -13.2), _m["rust"], _m["dark"])
+	_root.add_child(_cart)
 	for spot in [[Vector3(1.4, 0.6, 7.0), 0.0], [Vector3(1.9, 0.6, -14.8), 0.0]]:
 		var p: Vector3 = spot[0]
 		_slab(p + Vector3(-0.2, -0.6, -0.2), p + Vector3(0.2, -0.2, 0.2), _m["metal"])
