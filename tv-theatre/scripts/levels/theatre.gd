@@ -1,4 +1,4 @@
-extends "res://scripts/levels/level.gd"
+extends "res://shared/level.gd"
 ## "Places, Please!": grey-box theatre, backstage crew during a live play.
 ##
 ## Layout (local metres):

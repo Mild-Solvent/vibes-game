@@ -7,7 +7,7 @@ extends Node3D
 
 enum Phase { PREP, LIVE, WRAP }
 
-const PropScript := preload("res://scripts/prop.gd")
+const PropScript := preload("res://shared/prop.gd")
 
 var overview_camera: Camera3D
 

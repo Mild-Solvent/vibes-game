@@ -7,3 +7,9 @@ export_presets.cfg
 # OS
 .DS_Store
 Thumbs.db
+# Portable engine (downloaded by tools/run.ps1)
+/engine/*
+!/engine/README.md
+# shared/ is linked into each game by tools/run.ps1
+/tv-theatre/shared
+/mushroom/shared

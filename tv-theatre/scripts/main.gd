@@ -8,9 +8,9 @@ extends Node3D
 ##   godot --path . -- --host --show=1 --name=Adam
 ##   godot --path . -- --join=127.0.0.1 --name=Denis
 
-const PlayerScript := preload("res://scripts/player.gd")
-const DirectorScript := preload("res://scripts/game_director.gd")
-const HudScript := preload("res://scripts/hud.gd")
+const PlayerScript := preload("res://shared/player.gd")
+const DirectorScript := preload("res://shared/game_director.gd")
+const HudScript := preload("res://shared/hud.gd")
 const LEVELS := [
 	[preload("res://scripts/levels/studio.gd"), "Studio", Vector3(0, 0, 0)],
 	[preload("res://scripts/levels/theatre.gd"), "Theatre", Vector3(400, 0, 0)],

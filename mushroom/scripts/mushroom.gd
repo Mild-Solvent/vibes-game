@@ -1,4 +1,4 @@
-extends "res://scripts/prop.gd"
+extends "res://shared/prop.gd"
 ## A mushroom you can pick, carry to the basket, or taste (F while holding it).
 ## Every edible kind has a poisonous look-alike. Tasting a bad one makes you "see things".
 

@@ -1,4 +1,4 @@
-extends "res://scripts/levels/level.gd"
+extends "res://shared/level.gd"
 ## "We're Live!": grey-box TV news studio.
 ##
 ## Layout (local metres, looking from the back of the room towards the set):

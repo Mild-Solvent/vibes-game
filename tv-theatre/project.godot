@@ -18,7 +18,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-Net="*res://scripts/net.gd"
+Net="*res://shared/net.gd"
 
 [display]
 

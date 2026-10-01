@@ -4,7 +4,7 @@ extends Node
 
 signal changed
 
-const Level := preload("res://scripts/levels/level.gd")
+const Level := preload("res://shared/level.gd")
 const PUSH_INTERVAL := 0.15
 
 var running := false

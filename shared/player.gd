@@ -2,7 +2,7 @@ extends CharacterBody3D
 ## A crew member. Each peer drives its own player (client-authoritative movement);
 ## everyone else sees it through the MultiplayerSynchronizer.
 
-const PropScript := preload("res://scripts/prop.gd")
+const PropScript := preload("res://shared/prop.gd")
 
 const WALK_SPEED := 4.5
 const SPRINT_SPEED := 7.5

@@ -1,4 +1,4 @@
-extends "res://scripts/levels/level.gd"
+extends "res://shared/level.gd"
 ## Mushroom foraging: friends lost in a foggy Slovak forest, filling one basket before dark.
 ## Every good mushroom has a poisonous look-alike. Pick, carry (E), throw (Q) or taste (F).
 ## Bad mushrooms in the basket cost points; tasting a bad one makes you see things.
