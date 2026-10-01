@@ -21,6 +21,11 @@ licence file. Mushrooms, the terrain, water and the trip effects are made in cod
 | Witch | [Polygonal Mind via Poly Pizza](https://poly.pizza/m/vWI9PHfjcy) | CC0 | the Hungry Hag | `assets/polypizza/hag.glb` |
 | Wolf (animated) | [Quaternius via Poly Pizza](https://poly.pizza/m/P1gU3Qkr9r) | CC0 | wolves | `assets/polypizza/wolf.glb` |
 | Grandmother | [Aya Kawa via Poly Pizza](https://poly.pizza/m/brIJ7qxMvx-) | CC-BY 3.0 | Babka Hela | `assets/polypizza/grandmother.glb` |
+| Furniture Kit | [Kenney](https://kenney.nl/assets/furniture-kit) | CC0 | sanatorium beds, chairs, desks, tubs, washers, ceiling lamps, PA speakers, shelves | `assets/kenney/furniture-kit/` |
+| Mini Characters (wheelchair) | [Kenney](https://kenney.nl/assets/mini-characters) | CC0 | sanatorium wheelchairs | `assets/kenney/mini-characters-extra/` |
+| Survival Kit (tools) | [Kenney](https://kenney.nl/assets/survival-kit) | CC0 | mine pickaxes, shovel, anvil | `assets/kenney/survival-kit-extra/` |
+| Graveyard Kit (extras) | [Kenney](https://kenney.nl/assets/graveyard-kit) | CC0 | crypt skeletons, coffin, candles, pews, altar, urns, crosses, lamppost | `assets/kenney/graveyard-kit-extra/` |
+| Watercraft Kit (rowboat) | [Kenney](https://kenney.nl/assets/watercraft-kit) | CC0 | the leaky rowboat and the island wreck | `assets/kenney/watercraft-kit/` |
 
 Sound effects: see `assets/sfx/CREDITS-sfx.md` (Kenney CC0, plus sounds synthesized by
 `assets/sfx/tools/gen_sfx.py`).
