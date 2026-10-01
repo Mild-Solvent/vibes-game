@@ -115,6 +115,7 @@ func _physics_process(delta: float) -> void:
 			Team.car_seats = [0, 0, 0, 0]
 			Team.push_all()
 			Team.tell(0, "The car flipped! Two of you have to lift it back up (E).")
+			Team.highlight("%s flips the car" % _driver_name())
 			Sfx.play_all("car_crash", global_position)
 	var mine := is_multiplayer_authority()
 	freeze = not mine

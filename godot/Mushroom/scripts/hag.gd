@@ -152,6 +152,7 @@ func _grab(p: Node3D) -> void:
 		Sfx.play_all("hag_laugh", global_position)
 		Team.tell(0, "The Hag snatches the mushroom out of %s's hand, sniffs it, and shuffles away... for now." %
 			Team.players[p.peer_id]["name"])
+		Team.highlight("%s bribes the Hag with a mushroom" % Team.players[p.peer_id]["name"])
 	else:
 		Sfx.play_all("hag_scream", global_position)
 		Team.kill(p.peer_id, "the Hungry Hag (should've had a mushroom)")

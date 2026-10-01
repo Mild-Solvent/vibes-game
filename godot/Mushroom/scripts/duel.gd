@@ -71,6 +71,7 @@ func _finish() -> void:
 		Sfx.play_all("eat", m.global_position)
 		Team.apply_mushroom(victim, m.effect, m.display_name)
 		Team.tell(0, "%s shoved the mushroom into %s's mouth. Gulp." % [_name(feeder), _name(victim)])
+		Team.highlight("%s force-feeds %s" % [_name(feeder), _name(victim)])
 	else:
 		m._drop()
 		m.linear_velocity = Vector3(randf_range(-6, 6), 5, randf_range(-6, 6))

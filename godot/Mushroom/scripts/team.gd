@@ -330,6 +330,16 @@ func tell(peer_id: int, text: String) -> void:
 		_toast.rpc_id(peer_id, text)
 
 
+## Host: something worth seeing again in the end-of-day reel. Every peer snaps its own screen.
+func highlight(text: String) -> void:
+	_highlight.rpc(text)
+
+
+@rpc("authority", "call_local", "reliable")
+func _highlight(text: String) -> void:
+	get_tree().call_group("hud", "remember_highlight", text)
+
+
 ## Host: send the whole state to everyone (it's small).
 func push_all() -> void:
 	_push()
@@ -552,7 +562,9 @@ func _kick_in(peer_id: int, effect: int, display_name: String) -> void:
 			else:
 				set_status(peer_id, Status.TRIPPING, TRIP_SECONDS)
 				tell(peer_id, "Oh. Oh no. The trees are breathing. That mushroom from earlier...")
+				highlight("%s starts tripping" % players[peer_id]["name"])
 		Mushroom.Effect.STRONG:
+			highlight("%s passes out face-first" % players[peer_id]["name"])
 			set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
 			set_status(peer_id, Status.TRIPPING, PASS_OUT_SECONDS + 20.0)
 			tell(peer_id, "You see the face of God. Then the ground.")

@@ -379,6 +379,7 @@ func _police_raid(missing: int) -> void:
 	Team.set_police(-1.0, 0)
 	lost_for.clear()
 	Sfx.play_all("police_siren", Vector3.ZERO)
+	Team.highlight("Police raid at camp")
 	Team.tell(0, "POLICE RAID at camp! \"Where is %s?!\" They took %d € and your mushrooms." % [
 		Team.players.get(missing, {}).get("name", "your friend"), lost_cash])
 
@@ -453,7 +454,7 @@ func _build_camp() -> void:
 
 func _build_village() -> void:
 	var c := Terrain.place_centre("village")
-	_signpost("HORNÁ LEHOTA", Vector3(c.x - 44, 0, c.z - 6), -PI / 2.0, 72)
+	_signpost("HORNÁ LEHOTA", Vector3(c.x - 44, 0, c.z - 6), -PI / 2.0, 60)
 	var houses := ["a", "b", "d", "e", "f", "g", "h", "b", "e", "a", "d"]
 	for i in houses.size():
 		var a := i * TAU / houses.size() + 0.3
@@ -475,7 +476,7 @@ func _build_village() -> void:
 
 	# Babka Hela: put mushrooms on her counter (or bring the basket) and she names and buys them.
 	_day_only.append(_npc_model(PP + "grandmother.glb", c + Vector3(-6, 0, 8.6), PI, 1.5))
-	_signpost("BABKA HELA\nputs a name to any mushroom\nbuys the good ones", Vector3(c.x - 8.5, 0, c.z + 6), 0.4, 34)
+	_signpost("BABKA HELA\nputs a name to any mushroom\nbuys the good ones", Vector3(c.x - 8.5, 0, c.z + 6), 0.4, 28)
 	var babka := InteractableScript.new()
 	babka.configure("Babka", Vector3(3, 2, 1.2), c + Vector3(-6, 1, 6.6), "talk to Babka Hela (sell the basket)", _use_babka)
 	add_child(babka)
@@ -490,7 +491,7 @@ func _build_village() -> void:
 
 	# Jano's shop: every item is a spot on his counter you press E at.
 	_day_only.append(_npc_model(K + "mini-characters/character-male-e.glb", c + Vector3(8, 0, 8.6), PI, 1.75))
-	_signpost("JANO'S POTRAVINY\neverything a forager needs\n(and some things they don't)", Vector3(c.x + 11.5, 0, c.z + 6), -0.4, 34)
+	_signpost("JANO'S POTRAVINY\neverything a forager needs\n(and some things they don't)", Vector3(c.x + 11.5, 0, c.z + 6), -0.4, 28)
 	for i in SHOP.size():
 		var item: String = SHOP[i][0]
 		var x := -2.2 + (i % 5) * 1.1
@@ -511,7 +512,7 @@ func _build_village() -> void:
 
 	_day_only.append(_npc_model(K + "mini-characters/character-male-f.glb", c + Vector3(3, 0, -8), 0.5, 1.75))
 	_day_only.append(_npc_model(K + "mini-characters/character-female-f.glb", c + Vector3(-8, 0, -4), 2.0, 1.7))
-	_signpost("UNCLE FERO\nloans. no questions.\npayback every 3 days", Vector3(c.x + 14, 0, c.z - 12), -2.3, 34)
+	_signpost("UNCLE FERO\nloans. no questions.\npayback every 3 days", Vector3(c.x + 14, 0, c.z - 12), -2.3, 28)
 
 
 func _build_casino() -> void:
@@ -537,7 +538,7 @@ func _build_casino() -> void:
 func _build_witch() -> void:
 	var c := Terrain.place_centre("witch")
 	var gy := K + "graveyard-kit/"
-	_signpost("THE WITCH\nbring her the sick, the dead,\nand whatever she asks for", Vector3(c.x + 14, 0, c.z + 14), PI * 0.25, 40)
+	_signpost("THE WITCH\nbring her the sick, the dead,\nand whatever she asks for", Vector3(c.x + 14, 0, c.z + 14), PI * 0.25, 30)
 	_solid(gy + "crypt.glb", Vector3(5, 5, 6), c + Vector3(0, 0, -10), 0.0)
 	for i in 10:
 		var a := _rng.randf() * TAU
@@ -949,7 +950,7 @@ func _solid(path: String, size: Vector3, pos: Vector3, yaw: float) -> Node3D:
 
 
 ## A wooden signpost at (x, z) on the ground, board facing `yaw`, text on both sides.
-func _signpost(text: String, at: Vector3, yaw: float, size := 44) -> void:
+func _signpost(text: String, at: Vector3, yaw: float, size := 36) -> void:
 	var ground := Terrain.height(at.x, at.z)
 	var post := StaticBody3D.new()
 	post.position = Vector3(at.x, ground, at.z)
@@ -969,12 +970,16 @@ func _signpost(text: String, at: Vector3, yaw: float, size := 44) -> void:
 	pole.position.y = 1.3
 	pole.material_override = wood
 	post.add_child(pole)
-	var lines := text.count("\n") + 1
+	var rows := text.split("\n")
+	var longest := 0
+	for row in rows:
+		longest = maxi(longest, row.length())
+	var em := size * 0.005  # metres per font size unit at pixel_size 0.005
 	var board := MeshInstance3D.new()
 	var board_mesh := BoxMesh.new()
-	board_mesh.size = Vector3(0.012 * size * maxf(1.0, text.length() / float(lines) / 2.2), 0.012 * size * lines + 0.2, 0.06)
+	board_mesh.size = Vector3(longest * em * 0.58 + 0.3, rows.size() * em * 1.25 + 0.2, 0.06)
 	board.mesh = board_mesh
-	board.position.y = 2.2
+	board.position.y = 1.9 + board_mesh.size.y / 2.0
 	board.material_override = wood
 	post.add_child(board)
 	for side in [1.0, -1.0]:
@@ -984,7 +989,7 @@ func _signpost(text: String, at: Vector3, yaw: float, size := 44) -> void:
 		label.pixel_size = 0.005
 		label.modulate = Color(0.95, 0.9, 0.75)
 		label.outline_size = 0
-		label.position = Vector3(0, 2.2, 0.035 * side)
+		label.position = Vector3(0, board.position.y, 0.035 * side)
 		label.rotation.y = 0.0 if side > 0.0 else PI
 		post.add_child(label)
 	add_child(post)
