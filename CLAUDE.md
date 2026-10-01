@@ -10,7 +10,7 @@ and `02-gdd/00-gdd-core.md`). Record decisions in `docs/design/05-production/dec
   A change in `shared/` affects both games; check both still boot.
 - `engine/` holds the pinned portable Godot (`$GodotVersion` in `tools/launcher.ps1`); `play.bat` is the only launcher, not committed.
   Smoke test: `engine/godot.exe --headless --log-file <f> --path games/<game> --quit-after 400 -- --host`.
-- Engine: Godot 4.7 (4.4+ works), GL Compatibility renderer (potato PCs matter for this genre).
+- Engine: Godot 4.7.2 stable (latest); projects target 4.7, GL Compatibility renderer (potato PCs matter for this genre).
 - Everything is built from code for now (`shared/`, `games/<game>/scripts/`); `scenes/main.tscn` only hosts `main.gd`.
   Scripts reference each other with `preload` consts, not `class_name`.
 - Levels (`games/<game>/scripts/levels/`) extend `level.gd`, are all built on every peer at different world
