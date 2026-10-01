@@ -11,6 +11,7 @@ extends Node3D
 const PlayerScript := preload("res://scripts/player.gd")
 const DirectorScript := preload("res://scripts/game_director.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const MenuScript := preload("res://scripts/ui/menu.gd")
 const LEVELS := [
 	[preload("res://scripts/levels/forest.gd"), "Forest", Vector3(0, 0, 0)],
 ]
@@ -31,6 +32,7 @@ var players_root: Node3D
 var spawner: MultiplayerSpawner
 var director: DirectorScript
 var hud: HudScript
+var menu: CanvasLayer
 
 var _world_env: WorldEnvironment
 var _environments: Array[Environment] = []
@@ -75,18 +77,57 @@ func _ready() -> void:
 		titles.append(level.title())
 	hud.set_levels(titles)
 
-	hud.host_pressed.connect(_on_host_pressed)
-	hud.join_pressed.connect(_on_join_pressed)
-	Net.status_changed.connect(hud.set_status)
+	# The real menu (main menu, lobby, settings, pause). Same path on every peer: the lobby syncs.
+	menu = MenuScript.new()
+	menu.name = "Menu"
+	add_child(menu)
+	menu.host_requested.connect(_on_menu_host)
+	menu.join_requested.connect(_on_menu_join)
+	menu.start_requested.connect(func(): menu.lobby.start())
+	menu.lobby_started.connect(_on_lobby_started)
+	menu.leave_requested.connect(_on_leave)
+	menu.journal_requested.connect(hud.toggle_journal)
+	hud.menu = menu
+
 	Net.player_joined.connect(_on_player_joined)
 	Net.player_left.connect(_on_player_left)
-	multiplayer.connected_to_server.connect(hud.show_game)
 	director.changed.connect(_on_director_changed)
 
 	_activate(0)
 	_handle_command_line()
 
 
+## Menu: host a game. Players arrive in the lobby; the day starts when the host presses Start.
+func _on_menu_host(player_name: String, port: int) -> void:
+	Net.player_name = player_name
+	Net.port = port
+	Team.reset()
+	_activate(0)
+	if Net.host() != OK:
+		menu.show_main()
+
+
+func _on_menu_join(player_name: String, address: String, port: int) -> void:
+	Net.player_name = player_name
+	Net.port = port
+	Net.join(address if not address.is_empty() else "127.0.0.1")
+
+
+## Every peer: the host pressed Start in the lobby.
+func _on_lobby_started() -> void:
+	if multiplayer.is_server() and not director.running:
+		director.start(0)
+	hud.show_game()
+	menu.in_game = true
+	menu.hide_all()
+
+
+func _on_leave() -> void:
+	Net.leave()
+	get_tree().reload_current_scene()
+
+
+## Command line / quick start: host and start the day straight away.
 func _on_host_pressed(player_name: String, mode: int) -> void:
 	Net.player_name = player_name
 	Team.reset()
@@ -94,12 +135,15 @@ func _on_host_pressed(player_name: String, mode: int) -> void:
 	director.start(mode)
 	if Net.host() == OK:
 		hud.show_game()
+		menu.in_game = true
+		menu.hide_all()
 	else:
 		director.running = false
 
 
 func _on_join_pressed(player_name: String, address: String) -> void:
 	Net.player_name = player_name
+	multiplayer.connected_to_server.connect(func(): _on_lobby_started(), CONNECT_ONE_SHOT)
 	Net.join(address if not address.is_empty() else "127.0.0.1")
 
 
@@ -192,6 +236,8 @@ func _handle_command_line() -> void:
 			Net.port = arg.trim_prefix("--port=").to_int()
 		elif arg.begins_with("--show="):
 			hud.set_mode(clampi(arg.trim_prefix("--show=").to_int(), 0, levels.size() - 1))
+	if host or not join_address.is_empty():
+		menu.auto_lobby = false  # command line skips the lobby
 	if host:
 		_on_host_pressed(hud.get_player_name(), hud.get_mode())
 		if day_time >= 0.0:  # testing: jump straight into the day at this point (0 morning, 1 midnight)

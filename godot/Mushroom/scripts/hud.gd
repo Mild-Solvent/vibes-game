@@ -62,6 +62,7 @@ var _reel_grid: GridContainer
 var _reel_title: Label
 var _highlights: Array[Dictionary] = []
 var _phase := -1
+var menu: CanvasLayer  # the real menu (scripts/ui/menu.gd), set by main
 var intro_enabled := true
 
 
@@ -106,7 +107,7 @@ func set_levels(titles: Array) -> void:
 
 
 func show_menu() -> void:
-	_menu.visible = true
+	_menu.visible = false  # the old menu; scripts/ui/menu.gd is the real one now
 	_game.visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -247,7 +248,16 @@ func is_night() -> bool:
 
 
 func menu_open() -> bool:
-	return _menu.visible
+	return menu != null and menu.is_open()
+
+
+## The pause menu's "field journal" button.
+func toggle_journal() -> void:
+	var me := _local_player()
+	if me and me.holding_guide():
+		_journal_open = not _journal_open
+	else:
+		show_toast("Only whoever holds the field guide can read it. It's on the chest at camp.")
 
 
 ## A screen-wide gag (vomit...).

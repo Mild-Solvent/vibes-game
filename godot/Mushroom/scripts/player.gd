@@ -85,7 +85,8 @@ func _ready() -> void:
 		visual.layers = LOCAL_ONLY_LAYER
 	for visual in _monster.find_children("*", "VisualInstance3D", true, false):
 		visual.layers = LOCAL_ONLY_LAYER
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not _menu_open():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	Team.battery_installed.connect(func(): battery = 1.0)
 
 

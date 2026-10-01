@@ -113,6 +113,7 @@ func set_time_of_day(t: float) -> void:
 	if _amb.is_empty():
 		for key: String in AMBIENCE:
 			var p := AudioStreamPlayer.new()
+			p.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 			p.stream = _looped(_load(key))
 			p.volume_db = -80.0
 			p.autoplay = true
@@ -135,6 +136,7 @@ func stop_ambience() -> void:
 ## The caller owns the returned player: change pitch_scale / volume_db, stop() or queue_free() it.
 func loop(sound: String, parent: Node3D) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
+	p.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 	p.name = "Loop_" + sound
 	var def: Array = SOUNDS.get(sound, [])
 	if def.is_empty():
@@ -186,6 +188,7 @@ func _play(sound: String, pos: Vector3, volume_db: float, emit: bool) -> void:
 
 func _new_3d() -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
+	p.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 	add_child(p)
 	p.finished.connect(func() -> void:
 		_active -= 1
@@ -195,6 +198,7 @@ func _new_3d() -> AudioStreamPlayer3D:
 
 func _new_2d() -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
+	p.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 	add_child(p)
 	p.finished.connect(func() -> void:
 		_active -= 1
