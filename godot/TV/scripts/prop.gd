@@ -59,6 +59,16 @@ func remove_from_play() -> void:
 	position = Vector3(position.x, -100.0, position.z)
 
 
+## Host only: put a removed prop back into play at `pos` (parent space).
+func bring_into_play(pos: Vector3) -> void:
+	_drop()
+	removed = false
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	rotation = Vector3.ZERO
+	position = pos
+
+
 func _physics_process(_delta: float) -> void:
 	var simulating := multiplayer.is_server() and not removed
 	if freeze == simulating:

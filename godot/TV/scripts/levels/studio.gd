@@ -14,13 +14,14 @@ extends "res://scripts/levels/level.gd"
 ## Show state outside the director (which camera is on air, REC, the teleprompter text) lives
 ## here: anyone asks the host (`request_*`), the host broadcasts `_show_state` to everyone.
 
-enum Event { NONE, DEAD_AIR, CREW_IN_SHOT, OFF_FRAME, NOTHING_TO_SEE, FIELD_REPORT }
+enum Event { NONE, DEAD_AIR, CREW_IN_SHOT, OFF_FRAME, NOTHING_TO_SEE, FIELD_REPORT, STORY_ON_AIR }
 
 const CameraRig := preload("res://scripts/camera_rig.gd")
 const ControlDesk := preload("res://scripts/control_desk.gd")
 const Broadcast := preload("res://scripts/broadcast.gd")
 const City := preload("res://scripts/levels/city.gd")
 const FieldCamera := preload("res://scripts/field_camera.gd")
+const NewsStories := preload("res://scripts/levels/news_stories.gd")
 
 const FURNITURE := "res://assets/kenney/furniture-kit/"
 const DESK_ZONE := AABB(Vector3(-1.5, -1.0, -6.4), Vector3(3.0, 4.0, 1.8))
@@ -31,7 +32,8 @@ const CAMERAS := [
 	["CAM 2  left", Vector3(-4.5, 0, -0.8), Vector3(0, 1.3, -5.2), 38.0],
 	["CAM 3  close", Vector3(4.2, 0, -1.6), Vector3(0, 1.45, -5.3), 26.0],
 ]
-const SHOT_RANGE := 22.0
+const SHOT_RANGE := 30.0
+const STORY_BONUS := 3.0  # ratings per second while the breaking-news prop is on air
 const STATE_INTERVAL := 1.0
 const NEWS_LINE := "CHANNEL 6 EVENING NEWS  |  Local man finds cat. More at eleven."
 const TICKER := "Weather: grey, then greyer  ·  Traffic: yes  ·  Local cat found  ·  Stay tuned"
@@ -44,8 +46,10 @@ var subtitle := ""
 var broadcast: Broadcast
 var rigs: Array = []
 var field_camera: FieldCamera
+var story := -1  # breaking news running now (index into NewsStories.STORIES), every peer
 
 var _phase := Phase.PREP
+var _news: NewsStories
 var _state_timer := 0.0
 var _prompter_text: Label3D
 var _sun: DirectionalLight3D
@@ -64,6 +68,11 @@ func _ready() -> void:
 	_build_broadcast()
 	_build_props()
 	City.new().build(self)
+	_news = NewsStories.new()
+	_news.build(self, City.STORY_SPOTS)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--story="):
+			_news.forced = arg.trim_prefix("--story=").to_int()
 
 
 func make_environment() -> Environment:
@@ -104,22 +113,33 @@ func is_live() -> bool:
 
 
 func server_tick(delta: float, director: Node) -> void:
-	if broadcast.sources[take] == field_camera:
-		_field_tick(delta, director)
-		return
+	var story := _news.server_tick(director)
 	var cam := broadcast.active_camera()
+	var blockers := _non_static_rids()
+	var story_seen := _news.on_camera(story, cam, func(point: Vector3) -> bool:
+		return _visible_to(cam, point, blockers))
+	if broadcast.sources[take] == field_camera:
+		_field_tick(delta, director, cam, blockers, story_seen)
+	else:
+		_studio_tick(delta, director, cam, blockers)
+	if story_seen:
+		director.score += STORY_BONUS * delta
+		if director.event in [Event.NONE, Event.OFF_FRAME, Event.FIELD_REPORT]:
+			director.event = Event.STORY_ON_AIR
+
+
+## A studio camera is on air: one anchor at the desk, in frame, nobody else.
+func _studio_tick(delta: float, director: Node, cam: Camera3D, blockers: Array[RID]) -> void:
 	var anchors := 0
 	var anchors_in_frame := 0
 	var crew_in_shot := 0
-	var blockers := _non_static_rids()
 	var operators := []
 	for rig in rigs:
 		operators.append(rig.operator_id)
 	for player in get_tree().get_nodes_in_group("players"):
 		if player.peer_id in operators:
 			continue  # behind their own camera
-		var feet: Vector3 = player.global_position
-		var seen := _visible_to(cam, feet + Vector3.UP * 1.5, blockers) or _visible_to(cam, feet + Vector3.UP, blockers)
+		var seen := _player_seen(cam, player, blockers)
 		if DESK_ZONE.has_point(to_local(player.global_position)):
 			anchors += 1
 			if seen:
@@ -143,26 +163,29 @@ func server_tick(delta: float, director: Node) -> void:
 
 
 ## The field camera is on air: anyone in its picture is "our reporter on the scene".
-func _field_tick(delta: float, director: Node) -> void:
-	var cam := broadcast.active_camera()
-	var blockers := _non_static_rids()
+func _field_tick(delta: float, director: Node, cam: Camera3D, blockers: Array[RID], story_seen: bool) -> void:
 	var on_screen := 0
 	for player in get_tree().get_nodes_in_group("players"):
-		if player.peer_id == field_camera.holder_id:
-			continue
-		var feet: Vector3 = player.global_position
-		if _visible_to(cam, feet + Vector3.UP * 1.5, blockers) or _visible_to(cam, feet + Vector3.UP, blockers):
+		if player.peer_id != field_camera.holder_id and _player_seen(cam, player, blockers):
 			on_screen += 1
 	if on_screen > 0:
 		director.event = Event.FIELD_REPORT
 		director.score += 1.0 * delta
-	else:
+	elif not story_seen:
 		director.event = Event.NOTHING_TO_SEE
 		director.score -= 1.5 * delta
+	else:
+		director.event = Event.NONE
+
+
+func _player_seen(cam: Camera3D, player: Node3D, blockers: Array[RID]) -> bool:
+	var feet := player.global_position
+	return _visible_to(cam, feet + Vector3.UP * 1.5, blockers) or _visible_to(cam, feet + Vector3.UP, blockers)
 
 
 func server_reset() -> void:
 	super.server_reset()
+	_news.server_reset()
 	for rig in rigs:
 		rig.reset_aim()
 	take = 0
@@ -171,9 +194,13 @@ func server_reset() -> void:
 	_send_state()
 
 
-func apply_state(phase: int, event: int, _sub: int, _time_left: float) -> void:
+func apply_state(phase: int, event: int, sub: int, _time_left: float) -> void:
 	var phase_changed := phase != _phase
 	_phase = phase
+	var new_story := NewsStories.story_of(sub) if phase != Phase.PREP else -1
+	if new_story != story:
+		story = new_story
+		_show_story(phase == Phase.LIVE)
 	var live := phase == Phase.LIVE
 	_door_light.emission_enabled = live
 	for i in broadcast.sources.size():
@@ -204,7 +231,10 @@ func phase_text(phase: int, clock: String, score: float, _sub: int) -> String:
 		Phase.PREP:
 			return "PREP  %s  -  anchor on the green tape, crew to the cameras and the control desk" % clock
 		Phase.LIVE:
-			return "● ON AIR  %s   (%s)" % [clock, broadcast.sources[take].label]
+			var on_air := "● ON AIR  %s   (%s)" % [clock, broadcast.sources[take].label]
+			if story >= 0:
+				on_air += "\nBREAKING: %s" % NewsStories.headline(story)
+			return on_air
 	return "WRAP  -  final ratings %d%%" % int(score)
 
 
@@ -225,12 +255,20 @@ func rules_text() -> String:
 [b]GOAL[/b]: keep the RATINGS up for the whole show.
  - One anchor at the desk, in frame of the camera on air, nobody else in frame: ratings climb.
  - Nobody at the desk: dead air. Crew in the on-air shot, or the anchor out of frame: ratings drain.
+ - [b]BREAKING NEWS[/b]: when the show goes live (and again at half time) a story breaks: a shark
+   downtown, the last potato, the mayor stuck in a tire... The thing turns up somewhere in the city.
+   Get it into the picture of the camera on air (film it with the FIELD CAM, or carry it into the
+   studio) for big ratings. The field camera needs a reporter or the story in its picture.
  - The yellow floor tape shows CAM 1's default frame. The red tally light shows which camera is on air.
 
 [b]CONTROLS[/b]
  - Control desk: 1-4 or click TAKE, R record, T (or click) to type, Enter = next line, Esc leave.
  - Camera: mouse aims, mouse wheel zooms, Esc leaves.
  - Props: E / left click grab, Q throw."""
+
+
+func event_is_good(event: int) -> bool:
+	return event == Event.FIELD_REPORT or event == Event.STORY_ON_AIR
 
 
 func event_text(event: int) -> String:
@@ -245,11 +283,27 @@ func event_text(event: int) -> String:
 			return "The FIELD CAM is on air and shows nobody! Find a reporter!"
 		Event.FIELD_REPORT:
 			return "LIVE FROM THE SCENE"
+		Event.STORY_ON_AIR:
+			return "BREAKING NEWS ON AIR! Ratings through the roof!"
 	return ""
 
 
 func guide_text() -> String:
 	return "E at CONTROL: TAKE cameras, REC, teleprompter\nE at a CAM: operate it\nFIELD CAM by the EXIT: take it outside"
+
+
+## Every peer: the lower third, ticker and a HUD toast for the breaking story (or the usual news).
+func _show_story(announce: bool) -> void:
+	if story < 0:
+		broadcast.set_lower_third("", NEWS_LINE)
+		broadcast.set_ticker(TICKER)
+		return
+	var headline := NewsStories.headline(story)
+	broadcast.set_lower_third(" BREAKING NEWS ", headline)
+	broadcast.set_ticker(NewsStories.ticker(story) + "   ·   " + TICKER)
+	var hud := get_tree().get_first_node_in_group("hud")
+	if announce and hud:
+		hud.show_toast("BREAKING: %s\nFind it in the city and get it on the camera that's on air!" % headline, 7.0)
 
 
 ## True if `point` is inside `cam`'s picture and nothing solid is in the way.
@@ -281,6 +335,10 @@ func debug_seat(player: Node, seat: String) -> void:
 		player.rotation.y = -PI * 0.6
 		field_camera.global_position = player.hold_point()
 		player._held = field_camera
+		if story >= 0:
+			for prop_name in NewsStories.STORIES[story][2]:
+				var ahead: Vector3 = player.global_position + player.aim_direction() * 5.0
+				_news.props[prop_name].bring_into_play(to_local(ahead) * Vector3(1, 0, 1) + Vector3.UP)
 		field_camera.request_grab.rpc_id(1)
 		request_take.rpc_id(1, broadcast.sources.find(field_camera))
 	elif seat == "anchor":

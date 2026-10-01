@@ -146,7 +146,8 @@ func _on_director_changed() -> void:
 		level.score_name(),
 		director.score,
 		level.event_text(director.event),
-		level.guide_text()
+		level.guide_text(),
+		level.event_is_good(director.event)
 	)
 
 

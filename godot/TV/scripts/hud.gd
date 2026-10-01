@@ -96,7 +96,10 @@ func get_mode() -> int:
 	return _mode_select.selected
 
 
-func update_state(phase_text: String, score_name: String, score: float, event_text: String, guide: String) -> void:
+func update_state(
+		phase_text: String, score_name: String, score: float, event_text: String, guide: String, good := false
+) -> void:
+	_event_label.modulate = Color(0.4, 1, 0.45) if good else Color(1, 0.25, 0.25)
 	_phase_label.text = phase_text
 	_score_name.text = score_name
 	_score.value = score

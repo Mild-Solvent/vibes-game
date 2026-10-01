@@ -77,6 +77,11 @@ func event_text(_event: int) -> String:
 	return ""
 
 
+## Good news is shown green in the HUD, bad news red.
+func event_is_good(_event: int) -> bool:
+	return false
+
+
 ## The show's tab in the menu's RULES screen (BBCode): roles, goal, show-specific controls.
 func rules_text() -> String:
 	return ""

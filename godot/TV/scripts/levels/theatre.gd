@@ -213,6 +213,10 @@ func rules_text() -> String:
 The monitors in the wings show what the audience sees."""
 
 
+func event_is_good(event: int) -> bool:
+	return event == Event.SET_PERFECT
+
+
 func event_text(event: int) -> String:
 	match event:
 		Event.EMPTY_STAGE:
