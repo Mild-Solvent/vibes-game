@@ -13,6 +13,21 @@ const MushroomScript := preload("res://scripts/mushroom.gd")
 const SEED := 20261001
 const FOREST_RADIUS := 55.0
 const TREE_COUNT := 160
+const SCENERY_COUNT := 140
+const NATURE := "res://assets/kenney/nature-kit/"
+const TREE_MODELS := [
+	"tree_pineTallA.glb", "tree_pineTallB.glb", "tree_pineTallC.glb",
+	"tree_pineTallD.glb", "tree_pineRoundA.glb", "tree_pineRoundC.glb",
+]
+## [model, size, solid]
+const SCENERY := [
+	["rock_largeA.glb", Vector3(1.6, 1.0, 1.4), true],
+	["rock_largeC.glb", Vector3(1.4, 0.8, 1.2), true],
+	["stump_old.glb", Vector3(0.9, 0.6, 0.9), true],
+	["log_large.glb", Vector3(0.6, 0.5, 2.6), true],
+	["plant_bush.glb", Vector3(1.2, 0.8, 1.2), false],
+	["grass_large.glb", Vector3(0.8, 0.5, 0.8), false],
+]
 const MUSHROOM_COUNT := 48
 const BASKET_ZONE := AABB(Vector3(2.0, -0.5, -1.0), Vector3(2.0, 2.0, 2.0))
 const TRIP_SECONDS := 25.0
@@ -35,6 +50,7 @@ func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
 	_build_trees(rng)
+	_build_scenery(rng)
 	_build_mushrooms(rng)
 
 
@@ -161,8 +177,8 @@ func _build_ground() -> void:
 
 func _build_camp() -> void:
 	# The car (a Škoda-ish box) and the basket next to it.
-	_box(Vector3(2.0, 1.0, 4.2), Vector3(-1.2, 0.6, 0), Color(0.15, 0.35, 0.25))
-	_box(Vector3(1.8, 0.7, 2.2), Vector3(-1.2, 1.45, -0.3), Color(0.12, 0.3, 0.22))
+	var car := Vector3(2.0, 1.8, 4.2)
+	_dress(_box(car, Vector3(-1.2, 0.9, 0), Color(0.15, 0.35, 0.25)), "res://assets/kenney/car-kit/suv.glb", car)
 	var basket := Color(0.6, 0.42, 0.22)
 	var c := BASKET_ZONE.get_center()
 	_box(Vector3(2.0, 0.05, 2.0), Vector3(c.x, 0.03, c.z), basket)
@@ -175,11 +191,10 @@ func _build_camp() -> void:
 
 
 func _build_trees(rng: RandomNumberGenerator) -> void:
-	var trunk := _mat(Color(0.3, 0.2, 0.12))
-	var needles := _mat(Color(0.1, 0.28, 0.14))
 	for i in TREE_COUNT:
 		var pos := _random_spot(rng, 6.0)
 		var height := rng.randf_range(6.0, 11.0)
+		var width := rng.randf_range(2.8, 4.4)
 		var body := StaticBody3D.new()
 		body.position = pos
 		var shape := CylinderShape3D.new()
@@ -189,27 +204,25 @@ func _build_trees(rng: RandomNumberGenerator) -> void:
 		collision.shape = shape
 		collision.position.y = height / 2.0
 		body.add_child(collision)
-
-		var trunk_mesh := CylinderMesh.new()
-		trunk_mesh.top_radius = 0.18
-		trunk_mesh.bottom_radius = 0.3
-		trunk_mesh.height = height
-		var trunk_visual := MeshInstance3D.new()
-		trunk_visual.mesh = trunk_mesh
-		trunk_visual.material_override = trunk
-		trunk_visual.position.y = height / 2.0
-		body.add_child(trunk_visual)
-
-		var crown_mesh := CylinderMesh.new()  # a cone: spruce
-		crown_mesh.top_radius = 0.0
-		crown_mesh.bottom_radius = rng.randf_range(1.4, 2.2)
-		crown_mesh.height = height * 0.75
-		var crown := MeshInstance3D.new()
-		crown.mesh = crown_mesh
-		crown.material_override = needles
-		crown.position.y = height * 0.25 + crown_mesh.height / 2.0
-		body.add_child(crown)
+		var model := ModelFit.fit(NATURE + TREE_MODELS[rng.randi() % TREE_MODELS.size()], Vector3(width, height, width), rng.randf() * TAU)
+		model.position.y += height / 2.0
+		body.add_child(model)
 		add_child(body)
+
+
+## Rocks, stumps, logs and bushes between the trees. Rocks and stumps block you; plants don't.
+func _build_scenery(rng: RandomNumberGenerator) -> void:
+	for i in SCENERY_COUNT:
+		var entry: Array = SCENERY[rng.randi() % SCENERY.size()]
+		var size: Vector3 = entry[1] * rng.randf_range(0.7, 1.3)
+		var pos := _random_spot(rng, 7.0) + Vector3(0, size.y / 2.0, 0)
+		var yaw := rng.randf() * TAU
+		if entry[2]:
+			_dress(_box(size * Vector3(0.8, 1.0, 0.8), pos, Color.WHITE), NATURE + entry[0], size, yaw)
+		else:
+			var model := ModelFit.fit(NATURE + entry[0], size, yaw)
+			model.position += pos
+			add_child(model)
 
 
 func _build_mushrooms(rng: RandomNumberGenerator) -> void:

@@ -127,7 +127,7 @@ func _on_player_left(peer_id: int) -> void:
 ## Runs on every peer (host and clients) with the same data.
 func _spawn_player(data: Variant) -> Node:
 	var player := PlayerScript.new()
-	player.setup(data["id"], data["name"], PLAYER_COLORS[data["color"]])
+	player.setup(data["id"], data["name"], PLAYER_COLORS[data["color"]], data["color"])
 	player.position = data["pos"]
 	return player
 

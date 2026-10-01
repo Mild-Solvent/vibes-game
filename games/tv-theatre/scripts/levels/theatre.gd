@@ -22,6 +22,13 @@ const SET_TOLERANCE := 1.0
 const VERDICT_TIME := 3.0
 
 ## Set piece name, size, colour.
+const KENNEY := "res://assets/kenney/"
+## Model per entry in PIECES, and whether to stretch it to fill the piece's box.
+const PIECE_MODELS := [
+	["castle-kit/tree-large.glb", false],
+	["castle-kit/wall.glb", false],
+	["furniture-kit/loungeDesignChair.glb", false],
+]
 const PIECES := [
 	["TREE", Vector3(0.6, 2.2, 0.6), Color(0.2, 0.55, 0.2)],
 	["CASTLE_WALL", Vector3(2.0, 1.8, 0.3), Color(0.55, 0.55, 0.6)],
@@ -56,10 +63,14 @@ func _ready() -> void:
 		var p: Array = PIECES[i]
 		var size: Vector3 = p[1]
 		var spot: Vector2 = LAYOUTS[0][i]
-		_pieces.append(_prop(p[0], size, p[2], 8.0, Vector3(spot.x, STAGE_TOP + size.y / 2.0 + 0.05, spot.y)))
+		var piece := _prop(p[0], size, p[2], 8.0, Vector3(spot.x, STAGE_TOP + size.y / 2.0 + 0.05, spot.y))
+		_dress(piece, KENNEY + PIECE_MODELS[i][0], size, 0.0, PIECE_MODELS[i][1])
+		_pieces.append(piece)
 	_prop("SKULL", Vector3(0.2, 0.22, 0.24), Color(0.95, 0.93, 0.85), 0.5, Vector3(7.5, STAGE_TOP + 1.0, -4.5))
 	_prop("SWORD", Vector3(0.08, 0.08, 1.1), Color(0.8, 0.8, 0.85), 1.0, Vector3(7.5, STAGE_TOP + 1.0, -5.5))
-	_prop("FOG_MACHINE", Vector3(0.6, 0.4, 0.5), Color(0.2, 0.2, 0.2), 4.0, Vector3(-7.5, STAGE_TOP + 0.3, -8.0))
+	var fog := Vector3(0.6, 0.4, 0.5)
+	var fog_machine := _prop("FOG_MACHINE", fog, Color(0.2, 0.2, 0.2), 4.0, Vector3(-7.5, STAGE_TOP + 0.3, -8.0))
+	_dress(fog_machine, KENNEY + "furniture-kit/speaker.glb", fog, PI / 2.0)
 	apply_state(Phase.PREP, Event.NONE, 0, 0.0)
 
 
@@ -213,7 +224,8 @@ func _build_house() -> void:
 	# Seats.
 	for row in 6:
 		for x in [-6.0, -3.0, 0.0, 3.0, 6.0]:
-			_box(Vector3(2.4, 0.5, 0.6), Vector3(x, 0.25, 2.0 + row * 1.5), Color(0.5, 0.08, 0.1))
+			var seats := _box(Vector3(2.4, 0.5, 0.6), Vector3(x, 0.25, 2.0 + row * 1.5), Color(0.5, 0.08, 0.1))
+			_dress(seats, KENNEY + "furniture-kit/benchCushion.glb", Vector3(2.4, 0.5, 0.6), PI, true)
 	_work_light = _light(Vector3(0, 5, 6), 0.25, 14.0, Color(0.6, 0.7, 1.0))
 
 

@@ -8,6 +8,7 @@ extends Node3D
 enum Phase { PREP, LIVE, WRAP }
 
 const PropScript := preload("res://shared/prop.gd")
+const ModelFit := preload("res://shared/model_fit.gd")
 
 var overview_camera: Camera3D
 
@@ -130,6 +131,16 @@ func _box(size: Vector3, pos: Vector3, color: Color, solid := true) -> Node3D:
 	body.add_child(visual)
 	add_child(body)
 	return body
+
+
+## Swaps the grey box of a `_box` / `_prop` node for a model fitted to the same `size`.
+## The collider is untouched, so gameplay doesn't change. Returns the node.
+func _dress(node: Node3D, model_path: String, size: Vector3, yaw := 0.0, stretch := false) -> Node3D:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			child.visible = false
+	node.add_child(ModelFit.fit(model_path, size, yaw, stretch))
+	return node
 
 
 func _mat(color: Color, emission := 0.0) -> StandardMaterial3D:

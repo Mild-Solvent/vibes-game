@@ -135,8 +135,8 @@ func _build_menu() -> void:
 	box.add_theme_constant_override("separation", 10)
 	center.add_child(box)
 
-	box.add_child(_label("STANDBY... GO!", 48))
-	box.add_child(_label("Friendslop demos. Everyone's watching. Nobody's ready.", 16))
+	box.add_child(_label(ProjectSettings.get_setting("application/config/name"), 48))
+	box.add_child(_label(ProjectSettings.get_setting("application/config/description"), 16))
 
 	box.add_child(_label("Your name", 16, HORIZONTAL_ALIGNMENT_LEFT))
 	_name_edit = LineEdit.new()

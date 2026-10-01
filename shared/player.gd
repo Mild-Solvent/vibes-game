@@ -3,6 +3,10 @@ extends CharacterBody3D
 ## everyone else sees it through the MultiplayerSynchronizer.
 
 const PropScript := preload("res://shared/prop.gd")
+const ModelFit := preload("res://shared/model_fit.gd")
+const CHARACTERS := [
+	"male-a", "female-a", "male-b", "female-b", "male-c", "female-c", "male-d", "female-d",
+]
 
 const WALK_SPEED := 4.5
 const SPRINT_SPEED := 7.5
@@ -17,6 +21,9 @@ var display_name := "Crew"
 var color := Color.WHITE
 
 var head: Node3D
+var variant := 0
+var _anim: AnimationPlayer
+var _last_position := Vector3.ZERO
 var camera: Camera3D
 var _held = null
 var _spawn_position := Vector3.ZERO
@@ -24,8 +31,9 @@ var _visuals: Array[VisualInstance3D] = []
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 
-func setup(id: int, player_name: String, body_color: Color) -> void:
+func setup(id: int, player_name: String, body_color: Color, character := 0) -> void:
 	peer_id = id
+	variant = character
 	display_name = player_name
 	color = body_color
 	name = str(id)
@@ -41,6 +49,8 @@ func _ready() -> void:
 	camera.current = true
 	camera.cull_mask &= ~LOCAL_ONLY_LAYER
 	for visual in _visuals:
+		visual.layers = LOCAL_ONLY_LAYER
+	for visual in find_children("*", "VisualInstance3D", true, false):
 		visual.layers = LOCAL_ONLY_LAYER
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -129,30 +139,23 @@ func _build() -> void:
 	collision.position.y = 0.85
 	add_child(collision)
 
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.35
-	body_mesh.height = 1.7
-	var body := MeshInstance3D.new()
-	body.mesh = body_mesh
-	body.position.y = 0.85
-	body.material_override = _material(color)
+	# Kenney mini character, turned to face -Z (Godot's forward), feet on the floor.
+	var path := "res://shared/assets/kenney/mini-characters/character-%s.glb" % CHARACTERS[variant % CHARACTERS.size()]
+	var body := ModelFit.fit(path, Vector3(1.2, 1.7, 1.2), PI)
+	body.position.y += 0.85
 	add_child(body)
-	_visuals.append(body)
+	var players := body.find_children("*", "AnimationPlayer", true, false)
+	if not players.is_empty():
+		_anim = players[0]
+		for anim_name in ["idle", "walk", "sprint"]:
+			if _anim.has_animation(anim_name):
+				_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+		_anim.play("idle")
 
 	head = Node3D.new()
 	head.name = "Head"
 	head.position.y = 1.55
 	add_child(head)
-
-	# A chunky headset visor so you can tell where people are looking.
-	var visor_mesh := BoxMesh.new()
-	visor_mesh.size = Vector3(0.5, 0.14, 0.2)
-	var visor := MeshInstance3D.new()
-	visor.mesh = visor_mesh
-	visor.position = Vector3(0, 0, -0.28)
-	visor.material_override = _material(Color(0.08, 0.08, 0.1))
-	head.add_child(visor)
-	_visuals.append(visor)
 
 	camera = Camera3D.new()
 	camera.fov = 80
@@ -177,6 +180,23 @@ func _build() -> void:
 	config.add_property(NodePath("Head:rotation"))
 	sync.replication_config = config
 	add_child(sync)
+
+
+## Every peer: pick idle / walk / sprint from how fast this player actually moved, so remote
+## players (whose velocity isn't synced) animate too.
+func _process(delta: float) -> void:
+	if _anim == null or delta <= 0.0:
+		return
+	var moved := global_position - _last_position
+	_last_position = global_position
+	var speed := Vector2(moved.x, moved.z).length() / delta
+	var wanted := "idle"
+	if speed > (WALK_SPEED + SPRINT_SPEED) / 2.0:
+		wanted = "sprint"
+	elif speed > 0.5:
+		wanted = "walk"
+	if _anim.current_animation != wanted and _anim.has_animation(wanted):
+		_anim.play(wanted, 0.15)
 
 
 func _material(albedo: Color) -> StandardMaterial3D:

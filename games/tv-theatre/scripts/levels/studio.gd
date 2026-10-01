@@ -11,6 +11,7 @@ extends "res://shared/level.gd"
 
 enum Event { NONE, DEAD_AIR, CREW_IN_SHOT }
 
+const FURNITURE := "res://assets/kenney/furniture-kit/"
 const DESK_ZONE := AABB(Vector3(-1.5, -1.0, -6.4), Vector3(3.0, 4.0, 1.8))
 const ON_AIR_CAMERA_POS := Vector3(0, 1.6, 1.0)
 const ON_AIR_CAMERA_TARGET := Vector3(0, 1.25, -5.0)
@@ -124,9 +125,16 @@ func _build_room() -> void:
 	_box(Vector3(24, 4, 0.3), Vector3(0, 2, 10.15), wall)
 	_box(Vector3(0.3, 4, 18), Vector3(-12.15, 2, 1), wall)
 	_box(Vector3(0.3, 4, 18), Vector3(12.15, 2, 1), wall)
-	_box(Vector3(3, 0.9, 1), Vector3(-6, 0.45, 6), Color(0.45, 0.32, 0.2))  # prop table
+	var prop_table := Vector3(3, 0.9, 1)
+	_dress(_box(prop_table, Vector3(-6, 0.45, 6), Color(0.45, 0.32, 0.2)), FURNITURE + "tableCross.glb", prop_table, 0.0, true)
 	_sign("PROPS", Vector3(-6, 1.6, 6))
-	_box(Vector3(3, 0.9, 1), Vector3(6, 0.45, 6), Color(0.2, 0.2, 0.25))  # control desk
+	var control_desk := Vector3(3, 0.9, 1)
+	_dress(_box(control_desk, Vector3(6, 0.45, 6), Color(0.2, 0.2, 0.25)), FURNITURE + "desk.glb", control_desk, PI, true)
+	var screen := Vector3(0.6, 0.5, 0.2)
+	for x in [5.4, 6.6]:
+		_dress(_box(screen, Vector3(x, 1.15, 6.3), Color.BLACK), FURNITURE + "computerScreen.glb", screen, PI)
+	var shelf := Vector3(1.0, 1.8, 0.4)
+	_dress(_box(shelf, Vector3(-10.5, 0.9, 9.6), Color.GRAY), FURNITURE + "bookcaseOpen.glb", shelf, PI, true)
 	_sign("CONTROL", Vector3(6, 1.6, 6))
 
 
@@ -139,7 +147,8 @@ func _build_set() -> void:
 	logo.position = Vector3(0, 2.6, -7.68)
 	add_child(logo)
 
-	_box(Vector3(3, 1, 0.8), Vector3(0, 0.5, -4.2), Color(0.75, 0.75, 0.8))
+	var news_desk := Vector3(3, 1, 0.8)
+	_dress(_box(news_desk, Vector3(0, 0.5, -4.2), Color(0.75, 0.75, 0.8)), FURNITURE + "desk.glb", news_desk, 0.0, true)
 	_box(Vector3(3.1, 0.06, 0.9), Vector3(0, 1.03, -4.2), Color(0.1, 0.2, 0.45))
 	_tape_rect(DESK_ZONE, Color(0.2, 0.9, 0.4))
 
@@ -213,9 +222,17 @@ func _build_props() -> void:
 	_prop("VT_CAT_TREE_FINAL_v2", tape, Color(0.85, 0.85, 0.7), 0.4, Vector3(-6.2, 1.0, 6))
 	_prop("VT_WEATHER", tape, Color(0.5, 0.8, 1.0), 0.4, Vector3(-5.6, 1.0, 6))
 	_prop("CUE_SHEET", Vector3(0.3, 0.02, 0.4), Color(1, 1, 0.85), 0.2, Vector3(-5.0, 1.0, 6.2))
-	_prop("BOX_A", Vector3(0.6, 0.6, 0.6), Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 0.4, 3.5))
-	_prop("BOX_B", Vector3(0.6, 0.6, 0.6), Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 1.1, 3.5))
-	_prop("ANCHOR_CHAIR", Vector3(0.55, 0.9, 0.55), Color(0.15, 0.15, 0.2), 6.0, Vector3(0.8, 0.5, -5.6))
+	var crate := Vector3(0.6, 0.6, 0.6)
+	var box_a := _prop("BOX_A", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 0.4, 3.5))
+	_dress(box_a, FURNITURE + "cardboardBoxClosed.glb", crate, 0.0, true)
+	var box_b := _prop("BOX_B", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 1.1, 3.5))
+	_dress(box_b, FURNITURE + "cardboardBoxClosed.glb", crate, 0.0, true)
+	var chair := Vector3(0.55, 0.9, 0.55)
+	var anchor_chair := _prop("ANCHOR_CHAIR", chair, Color(0.15, 0.15, 0.2), 6.0, Vector3(0.8, 0.5, -5.6))
+	_dress(anchor_chair, FURNITURE + "chairDesk.glb", chair)
 	_prop("COFFEE", Vector3(0.09, 0.14, 0.09), Color(0.95, 0.95, 0.95), 0.3, Vector3(0.6, 1.2, -4.2))
-	_prop("TRAFFIC_CONE", Vector3(0.35, 0.55, 0.35), Color(1, 0.45, 0.1), 1.0, Vector3(6.5, 0.4, 3.5))
-	_prop("PLANT", Vector3(0.4, 1.2, 0.4), Color(0.2, 0.6, 0.25), 2.0, Vector3(-3.5, 0.7, -6.8))
+	var cone := Vector3(0.35, 0.55, 0.35)
+	var traffic_cone := _prop("TRAFFIC_CONE", cone, Color(1, 0.45, 0.1), 1.0, Vector3(6.5, 0.4, 3.5))
+	_dress(traffic_cone, "res://assets/kenney/car-kit/cone.glb", cone)
+	var plant := Vector3(0.4, 1.2, 0.4)
+	_dress(_prop("PLANT", plant, Color(0.2, 0.6, 0.25), 2.0, Vector3(-3.5, 0.7, -6.8)), FURNITURE + "pottedPlant.glb", plant)
