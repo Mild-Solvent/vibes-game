@@ -22,6 +22,7 @@ var _flipped_for := 0.0
 var _lifters := {}  # host: peer id -> msec they last heaved
 var _cargo := {}  # host: prop -> its transform relative to the car (things on the roof rack)
 var _rack: Area3D
+var _engine: AudioStreamPlayer3D
 
 
 func build(model_path: String) -> void:
@@ -82,6 +83,19 @@ func build(model_path: String) -> void:
 func _ready() -> void:
 	_home = transform
 	Team.changed.connect(_on_team_changed)
+	_engine = Sfx.loop("car_engine", self) if Sfx.has_method("loop") else null
+
+
+## Every peer: engine sound rises with speed while someone's at the wheel.
+func _process(_delta: float) -> void:
+	if _engine == null:
+		return
+	var running: bool = seats[0] != 0
+	if running and not _engine.playing:
+		_engine.play()
+	elif not running and _engine.playing:
+		_engine.stop()
+	_engine.pitch_scale = 0.8 + clampf(linear_velocity.length() / 25.0, 0.0, 1.0) * 1.2
 
 
 ## Every peer: seats arrive with the team state. The driver simulates; with nobody at the wheel
@@ -235,6 +249,8 @@ func request_enter() -> void:
 		Team.tell(peer, "The car is full.")
 		return
 	new_seats[seat] = peer
+	if seat == 0:
+		Sfx.play_all("car_start", global_position)
 	Team.car_seats = new_seats
 	Team.push_all()
 
