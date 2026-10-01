@@ -25,6 +25,25 @@ void fragment() {
 	COLOR = vec4(c, 1.0);
 }
 """
+const POST_SHADER := """
+shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+uniform vec3 grade = vec3(1.0);
+uniform float vignette = 0.35;
+uniform float grain = 0.035;
+uniform float lift = 0.0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void fragment() {
+	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
+	c = c * grade + vec3(lift);
+	float luma = dot(c, vec3(0.299, 0.587, 0.114));
+	c = mix(vec3(luma), c, 1.08);
+	float v = distance(SCREEN_UV, vec2(0.5));
+	c *= 1.0 - vignette * smoothstep(0.35, 0.85, v);
+	c += (hash(SCREEN_UV * 800.0 + fract(TIME)) - 0.5) * grain;
+	COLOR = vec4(c, 1.0);
+}
+"""
 const INTRO := [
 	"Four friends lost their jobs on the same Monday.",
 	"Rent was due Tuesday. By Wednesday they lived in a junk camp in the forest.",
@@ -64,6 +83,7 @@ var _highlights: Array[Dictionary] = []
 var _phase := -1
 var menu: CanvasLayer  # the real menu (scripts/ui/menu.gd), set by main
 var _cheat_panel: Control
+var _post: ColorRect
 var _cheat_tag: Label
 var _over: ColorRect
 var _over_text: Label
@@ -404,6 +424,24 @@ func _show_game_over(stats: Dictionary) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+## The level, every frame: grade the picture. Warm day, golden dusk, blue-green night;
+## greener and darker under the old trees, washed out in the fog hollows.
+func set_grade(night: float, dusk: float, old_growth: float, hollow: float) -> void:
+	if _post == null:
+		return
+	var q: int = Settings.quality if "quality" in Settings else 2
+	_post.visible = q >= 1
+	var g := Vector3(1.04, 1.0, 0.94)
+	g = g.lerp(Vector3(1.12, 0.96, 0.8), dusk)
+	g = g.lerp(Vector3(0.82, 0.97, 1.08), night)
+	g = g.lerp(Vector3(0.9, 1.0, 0.9), old_growth * 0.6)
+	var mat := _post.material as ShaderMaterial
+	mat.set_shader_parameter("grade", g)
+	mat.set_shader_parameter("vignette", 0.3 + 0.25 * night + 0.15 * old_growth)
+	mat.set_shader_parameter("grain", 0.035 if q >= 2 else 0.0)
+	mat.set_shader_parameter("lift", 0.025 * hollow)
+
+
 ## Main calls this with the round phase; the reel shows at night (WRAP = 2).
 func set_phase(phase: int) -> void:
 	if phase == _phase:
@@ -502,6 +540,17 @@ func _build_game() -> void:
 	_game.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_game.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_game)
+
+	# Always-on post: colour grade by time of day, vignette, a little film grain.
+	_post = ColorRect.new()
+	_post.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_post.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var post_shader := Shader.new()
+	post_shader.code = POST_SHADER
+	var post_mat := ShaderMaterial.new()
+	post_mat.shader = post_shader
+	_post.material = post_mat
+	_game.add_child(_post)
 
 	_effect = ColorRect.new()
 	_effect.set_anchors_preset(Control.PRESET_FULL_RECT)

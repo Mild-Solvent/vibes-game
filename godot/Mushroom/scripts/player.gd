@@ -61,6 +61,8 @@ var _spook_in := 5.0
 var _step := 0.0
 var _pond_nag := 30.0
 var noclip := false  # cheat: fly through everything
+var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
+var _beam: MeshInstance3D
 var _model_base := 0.0
 
 
@@ -188,6 +190,8 @@ func _physics_process(delta: float) -> void:
 		speed = SWIM_SPEED
 	if holding_heavy():
 		speed *= 0.6
+	if brambles > 0:
+		speed = minf(speed, WALK_SPEED * 0.45)  # thorns: no running, barely walking
 	velocity.x = direction.x * speed + _knock.x
 	velocity.z = direction.z * speed + _knock.z
 	if _knock.y > 0.0:
@@ -620,6 +624,30 @@ func _build() -> void:
 	_torch.position = Vector3(0.2, -0.15, -0.2)
 	_torch.visible = false
 	head.add_child(_torch)
+	# A faint beam you can see cutting through the fog (cheap: a soft additive cone).
+	_beam = MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.06
+	cone.bottom_radius = 3.2
+	cone.height = 16.0
+	cone.radial_segments = 12
+	cone.rings = 1
+	cone.cap_top = false
+	cone.cap_bottom = false
+	_beam.mesh = cone
+	var beam_mat := StandardMaterial3D.new()
+	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam_mat.albedo_color = Color(1.0, 0.95, 0.8, 0.035)
+	beam_mat.no_depth_test = false
+	_beam.material_override = beam_mat
+	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beam.rotation.x = -PI / 2.0
+	_beam.position = Vector3(0, 0, -8.2)
+	_beam.visible = false
+	_torch.add_child(_beam)
 
 	_name_label = Label3D.new()
 	_name_label.text = display_name
@@ -645,6 +673,7 @@ func _build() -> void:
 ## Every peer: animation, torch, how the status looks, and monster disguise for trippers.
 func _process(delta: float) -> void:
 	_torch.visible = flashlight_on
+	_beam.visible = flashlight_on and (Settings.quality if "quality" in Settings else 2) >= 1
 	var s := status()
 	var me := multiplayer.get_unique_id()
 	var viewer_tripping := Team.is_tripping(me) and me != peer_id

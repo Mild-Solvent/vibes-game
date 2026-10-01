@@ -18,7 +18,7 @@ const PLACES := [
 	["witch", Vector2(-360, -300), 18.0, -0.4],
 	["ruin", Vector2(-140, 290), 10.0, 6.0],
 	["sanatorium", Vector2(260, 370), 34.0, 3.0],
-	["mine", Vector2(-410, 170), 16.0, 9.0],
+	["mine", Vector2(-410, 170), 22.0, 9.0],
 	["crypt", Vector2(130, -400), 16.0, 1.5],
 ]
 ## Roads the car can use (wide, dirt) and footpaths (narrow), as polylines.
@@ -39,6 +39,10 @@ const PATHS := [
 	[Vector2(30, -110), Vector2(110, -150), Vector2(150, -210)],
 	[Vector2(220, 280), Vector2(120, 330), Vector2(-20, 360), Vector2(-140, 290)],
 ]
+## Old-growth forest: giant trees, closed canopy, dim even at noon. [centre, radius]
+const OLD_GROWTH := [[Vector2(-170, -120), 95.0], [Vector2(110, 210), 80.0], [Vector2(-320, 330), 75.0]]
+## Fog hollows: dips with fog that never lifts. The rarest mushrooms grow there. [centre, radius]
+const FOG_HOLLOWS := [[Vector2(-60, -340), 48.0], [Vector2(330, 230), 42.0], [Vector2(-300, 250), 40.0]]
 const LAKE := [Vector2(150, -230), 62.0]
 const ISLAND := [Vector2(150, -230), 13.0]  # middle of the lake
 const HILL := [Vector2(-250, 0), 60.0, 30.0]  # centre, radius, height (steep on the east side)
@@ -80,6 +84,12 @@ static func height(x: float, z: float) -> float:
 		if island_d < 1.6:
 			h = lerpf(h, 0.4, smoothstep(1.6, 0.8, island_d))
 
+	# Fog hollows sit in bowls.
+	for hollow in FOG_HOLLOWS:
+		var hd: float = p.distance_to(hollow[0]) / hollow[1]
+		if hd < 1.2:
+			h -= 5.0 * smoothstep(1.2, 0.3, hd)
+
 	# Mountains around the edge.
 	var edge := maxf(absf(x), absf(z)) / (SIZE / 2.0)
 	if edge > 0.82:
@@ -107,6 +117,13 @@ static func colour(x: float, z: float, h: float) -> Color:
 	var c := grass
 	if h > 12.0:
 		c = c.lerp(Color(0.45, 0.43, 0.4), smoothstep(12.0, 20.0, h))
+	# Mossy, darker floor under the old trees; grey-green in the fog hollows.
+	var old := zone_amount(x, z, OLD_GROWTH)
+	if old > 0.0:
+		c = c.lerp(Color(0.2, 0.26, 0.14), old * 0.8)
+	var fog := zone_amount(x, z, FOG_HOLLOWS)
+	if fog > 0.0:
+		c = c.lerp(Color(0.3, 0.33, 0.28), fog * 0.6)
 	var lake_d := p.distance_to(LAKE[0])
 	if lake_d < LAKE[1] * 1.15:
 		c = c.lerp(Color(0.72, 0.65, 0.45), smoothstep(LAKE[1] * 1.15, LAKE[1] * 0.9, lake_d))
@@ -136,6 +153,15 @@ static func is_clear(x: float, z: float, margin := 0.0) -> bool:
 	if p.distance_to(LAKE[0]) < LAKE[1] * 1.05 + margin:
 		return false
 	return absf(x) < SIZE * 0.4 and absf(z) < SIZE * 0.4
+
+
+## 0..1: how deep inside one of `zones` ([centre, radius] list) the point is (soft edge).
+static func zone_amount(x: float, z: float, zones: Array) -> float:
+	var best := 0.0
+	for zone in zones:
+		var d: float = Vector2(x, z).distance_to(zone[0]) / zone[1]
+		best = maxf(best, 1.0 - smoothstep(0.7, 1.0, d))
+	return best
 
 
 ## True when `pos` is under the lake's surface (the only real water on the map).

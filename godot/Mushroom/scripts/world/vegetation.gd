@@ -38,8 +38,20 @@ const PLANTS := [
 static var _density: FastNoiseLite
 
 
+## Giant trees in the old-growth zones: [model, per zone, height range, collider radius]
+const GIANTS := [
+	["tree_pineTallA.glb", 110, Vector2(28, 42), 0.8], ["tree_pineTallB.glb", 110, Vector2(28, 42), 0.8],
+	["tree_pineTallC.glb", 90, Vector2(26, 38), 0.8], ["tree_pineTallD.glb", 90, Vector2(26, 38), 0.8],
+	["tree_tall.glb", 50, Vector2(22, 32), 0.6], ["stump_round.glb", 30, Vector2(0.5, 0.9), 0.4],
+	["log_large.glb", 30, Vector2(0.6, 0.9), 0.0], ["plant_flatTall.glb", 120, Vector2(0.5, 0.9), 0.0],
+]
+
+
 ## Builds everything under `parent`. Uses `rng` (seeded) so every peer gets the same forest.
+## Graphics quality only thins out what's DRAWN (Settings.foliage_density), never the colliders,
+## so every peer still walks into the same trees.
 static func build(parent: Node3D, rng: RandomNumberGenerator) -> void:
+	var density: float = Settings.foliage_density if "foliage_density" in Settings else 1.0
 	_density = FastNoiseLite.new()
 	_density.seed = Terrain.SEED + 3
 	_density.frequency = 0.008
@@ -66,19 +78,24 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> void:
 			var dense := _density.get_noise_2d(x, z) * 0.5 + 0.5
 			if rng.randf() > dense * 1.35:
 				continue
+			if Terrain.zone_amount(x, z, Terrain.OLD_GROWTH) > 0.3:
+				continue  # the giants have this ground
 			if not Terrain.is_clear(x, z, 0.0 if big else -3.0):
 				continue
 			var h := Terrain.height(x, z)
 			if h < Terrain.WATER_Y + 0.3:
 				continue
 			var height: float = rng.randf_range(entry[2].x, entry[2].y)
+			if entry[2].y > 3.0:
+				height *= 1.5  # a proper forest: tall trees everywhere
 			var s := height / aabb.size.y
 			var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * s)
 			var origin := Vector3(x, h - aabb.position.y * s - 0.05, z)
 			var key := Vector2i(floori(x / CHUNK), floori(z / CHUNK))
 			if not chunks.has(key):
 				chunks[key] = []
-			chunks[key].append(Transform3D(basis, origin) * local)
+			if big or rng.randf() < density:
+				chunks[key].append(Transform3D(basis, origin) * local)
 			placed += 1
 			if big:
 				var shape := CylinderShape3D.new()
@@ -88,20 +105,69 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> void:
 				col.shape = shape
 				col.position = Vector3(x, h + shape.height / 2.0, z)
 				trunks.add_child(col)
-		for key in chunks:
-			var list: Array = chunks[key]
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.mesh = mesh
-			mm.instance_count = list.size()
-			for i in list.size():
-				mm.set_instance_transform(i, list[i])
-			var mmi := MultiMeshInstance3D.new()
-			mmi.multimesh = mm
-			mmi.visibility_range_end = TREE_FADE if big or entry[2].y > 3.0 else SMALL_FADE
-			mmi.visibility_range_end_margin = 20.0
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-			parent.add_child(mmi)
+		_add_chunks(parent, chunks, mesh, big or entry[2].y > 3.0)
+	_build_giants(parent, rng, trunks)
+
+
+static func _add_chunks(parent: Node3D, chunks: Dictionary, mesh: Mesh, tall: bool) -> void:
+	for key in chunks:
+		var list: Array = chunks[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.visibility_range_end = TREE_FADE if tall else SMALL_FADE
+		mmi.visibility_range_end_margin = 20.0
+		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		parent.add_child(mmi)
+
+
+## The old-growth zones: huge trees packed close, a closed canopy, moss and fallen logs.
+static func _build_giants(parent: Node3D, rng: RandomNumberGenerator, trunks: StaticBody3D) -> void:
+	for entry in GIANTS:
+		var info := mesh_info(NATURE + entry[0])
+		if info.is_empty():
+			continue
+		var mesh: Mesh = info[0]
+		var local: Transform3D = info[1]
+		var aabb: AABB = info[2]
+		var chunks := {}
+		for zone in Terrain.OLD_GROWTH:
+			var centre: Vector2 = zone[0]
+			var r: float = zone[1]
+			var placed := 0
+			var tries := 0
+			while placed < entry[1] and tries < entry[1] * 10:
+				tries += 1
+				var a := rng.randf() * TAU
+				var d := sqrt(rng.randf()) * r
+				var x := centre.x + cos(a) * d
+				var z := centre.y + sin(a) * d
+				if not Terrain.is_clear(x, z, 0.0):
+					continue
+				var h := Terrain.height(x, z)
+				var height: float = rng.randf_range(entry[2].x, entry[2].y)
+				var s := height / aabb.size.y
+				# Giants are wider too, so the crowns close overhead.
+				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s * 0.9, s, s * 0.9))
+				var key := Vector2i(floori(x / CHUNK), floori(z / CHUNK))
+				if not chunks.has(key):
+					chunks[key] = []
+				chunks[key].append(Transform3D(basis, Vector3(x, h - aabb.position.y * s - 0.1, z)) * local)
+				placed += 1
+				if entry[3] > 0.0:
+					var shape := CylinderShape3D.new()
+					shape.radius = entry[3] * height / 34.0
+					shape.height = 5.0
+					var col := CollisionShape3D.new()
+					col.shape = shape
+					col.position = Vector3(x, h + 2.5, z)
+					trunks.add_child(col)
+		_add_chunks(parent, chunks, mesh, entry[2].y > 3.0)
 
 
 ## The first mesh in a model, its transform inside the model, and its bounds in model space.

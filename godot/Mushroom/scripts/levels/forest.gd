@@ -23,6 +23,7 @@ const CritterScript := preload("res://scripts/critter.gd")
 const BodyScript := preload("res://scripts/body.gd")
 const DuelScript := preload("res://scripts/duel.gd")
 const TrapScript := preload("res://scripts/trap.gd")
+const BrambleScript := preload("res://scripts/bramble.gd")
 
 const K := "res://assets/kenney/"
 const NATURE := K + "nature-kit/"
@@ -32,8 +33,12 @@ const MUSHROOM_COUNT := 420
 const BOAR_COUNT := 10
 const WOLF_COUNT := 9
 const SPARE_BASKETS := 4
-const TRAP_COUNT := 70
-const HOLE_COUNT := 12
+const BEAR_TRAPS := 46
+const MUD_PATCHES := 16
+const HOLE_COUNT := 14
+const BRAMBLES := 40
+const HOLLOW_MUSHROOMS := 40  # rare ones, in the fog hollows
+const RARE := ["golden_chanterelle", "rainbow_bolete", "glowcap", "witch_finger", "golden_chanterelle", "porcini"]
 ## Harmless animals: [model, count, size, speed]
 const CRITTERS := [
 	["animal-deer.glb", 30, Vector3(0.9, 1.5, 1.4), 2.2],
@@ -86,6 +91,16 @@ var _started := false
 var _police_check := 0.0
 var spawn_override := ""  # testing: spawn at a named place instead of camp
 var monsters_enabled := true  # cheat: switch the hag and wolves off
+# Daylight as the clock sets it; zones (old growth, fog hollows) then darken / fog it locally.
+var _base_fog := 0.01
+var _base_ambient := 0.3
+var _base_sun := 0.9
+var _base_fog_colour := Color.GRAY
+var _night_amount := 0.0
+var _dusk_amount := 0.0
+var _in_old := 0.0
+var _in_hollow := 0.0
+var _eerie_in := 8.0
 
 
 func _ready() -> void:
@@ -173,8 +188,60 @@ func make_environment() -> Environment:
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	_env.fog_enabled = true
 	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	# Mist pools in the low ground (valleys, the lake, the fog hollows).
+	_env.fog_height = Terrain.WATER_Y + 2.5
+	_env.fog_height_density = 0.09
+	# Bloom on lanterns, torches and anything glowing.
+	_env.glow_intensity = 0.75
+	_env.glow_bloom = 0.06
+	_env.glow_hdr_threshold = 0.85
+	_apply_quality()
+	if not Settings.changed.is_connected(_apply_quality):
+		Settings.changed.connect(_apply_quality)
 	_apply_daylight(0.0, 0.0)
 	return _env
+
+
+## Graphics quality: shadows, bloom (everything else reads Settings when it's built).
+func _apply_quality() -> void:
+	var q: int = Settings.quality if "quality" in Settings else 2
+	if _env:
+		_env.glow_enabled = q >= 1
+		_env.fog_height_density = [0.05, 0.08, 0.1][q]
+	if _sun:
+		_sun.shadow_enabled = q >= 1 and (Settings.shadows if "shadows" in Settings else true)
+		_sun.directional_shadow_max_distance = [40.0, 60.0, 90.0][q]
+
+
+## Every peer: where's MY player? Old growth is dark, fog hollows are thick. Smoothly.
+func _process(delta: float) -> void:
+	var me: Node3D = null
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.is_multiplayer_authority():
+			me = p
+	var old_target := 0.0
+	var hollow_target := 0.0
+	if me:
+		old_target = Terrain.zone_amount(me.global_position.x, me.global_position.z, Terrain.OLD_GROWTH)
+		hollow_target = Terrain.zone_amount(me.global_position.x, me.global_position.z, Terrain.FOG_HOLLOWS)
+	_in_old = move_toward(_in_old, old_target, delta * 0.5)
+	_in_hollow = move_toward(_in_hollow, hollow_target, delta * 0.35)
+	if _env:
+		var q: int = Settings.quality if "quality" in Settings else 2
+		var hollow_fog: float = [0.07, 0.1, 0.13][q]
+		_env.fog_density = _base_fog + _in_hollow * hollow_fog + _in_old * 0.012
+		_env.fog_light_color = _base_fog_colour.lerp(Color(0.42, 0.45, 0.42) * (1.0 - _night_amount * 0.9), _in_hollow * 0.8)
+		_env.ambient_light_energy = _base_ambient * (1.0 - 0.55 * _in_old)
+	if _sun:
+		_sun.light_energy = _base_sun * (1.0 - 0.75 * _in_old)
+	get_tree().call_group("hud", "set_grade", _night_amount, _dusk_amount, _in_old, _in_hollow)
+	# The hollows sound wrong.
+	if _in_hollow > 0.5:
+		_eerie_in -= delta
+		if _eerie_in <= 0.0 and me:
+			_eerie_in = randf_range(7.0, 16.0)
+			var around: Vector3 = me.global_position + Vector3(randf_range(-1, 1), 0.3, randf_range(-1, 1)).normalized() * 9.0
+			Sfx.play(["hag_whisper", "branch_snap", "owl_hoot"][randi() % 3], around, -4.0)
 
 
 func server_tick(delta: float, director: Node) -> void:
@@ -192,7 +259,8 @@ func server_reset() -> void:
 	_started = true
 	for m in _mushrooms:
 		m.reset_to_home()
-		m.position = _mushroom_spot()
+		var hollow: int = m.get_meta("hollow", -1)
+		m.position = _hollow_spot(hollow) if hollow >= 0 else _mushroom_spot()
 		m.rotation.y = _rng.randf() * TAU
 	for prop in find_children("*", "RigidBody3D", true, false):
 		if prop.has_method("reset_to_home") and not prop is MushroomScript and not prop is BodyScript:
@@ -312,7 +380,7 @@ func _apply_daylight(t: float, dawn: float) -> void:
 	if _sun:
 		var rise := lerpf(-0.08, -0.6, 1.0 - dawn)
 		_sun.rotation = Vector3(lerpf(rise, -0.05, smoothstep(0.1, 0.7, t)) if t > 0.0 else rise, 0.7, 0.0)
-		_sun.light_energy = lerpf(0.0, 0.95, day)
+		_base_sun = lerpf(0.0, 0.95, day)
 		_sun.light_color = Color(1, 0.96, 0.88).lerp(Color(1, 0.6, 0.4), glow * 0.8)
 		_sun.visible = day > 0.01
 	if _env:
@@ -320,11 +388,14 @@ func _apply_daylight(t: float, dawn: float) -> void:
 		sky = sky.lerp(Color(0.01, 0.012, 0.025), 1.0 - day)
 		_env.background_color = sky
 		_env.ambient_light_color = Color(0.85, 0.85, 0.8).lerp(Color(0.25, 0.3, 0.5), 1.0 - day)
-		_env.ambient_light_energy = lerpf(0.03, 0.32, day)
+		_base_ambient = lerpf(0.03, 0.32, day)
 		var mist := Color(0.6, 0.68, 0.72).lerp(sky, 0.5).lerp(Color(0.015, 0.02, 0.03), 1.0 - day)
-		_env.fog_light_color = mist
+		_base_fog_colour = mist
 		# Foggy forest: thick at night, misty at dawn, never really clear.
-		_env.fog_density = lerpf(0.045, 0.009, day) + dawn * 0.012
+		_base_fog = lerpf(0.045, 0.009, day) + dawn * 0.012
+		_env.fog_height_density = ([0.05, 0.08, 0.1][Settings.quality if "quality" in Settings else 2]) * (1.0 + dawn * 1.5)
+	_night_amount = 1.0 - day
+	_dusk_amount = glow
 
 
 # --- people coming and going ------------------------------------------------------------
@@ -677,11 +748,25 @@ func _build_mushrooms() -> void:
 	kind_rng.seed = SEED + 7
 	for i in MUSHROOM_COUNT:
 		var mushroom := MushroomScript.new()
-		mushroom.setup_mushroom("Mushroom_%d" % i, MushroomScript.pick_kind(kind_rng))
-		mushroom.position = _mushroom_spot()
+		var hollow := i % Terrain.FOG_HOLLOWS.size() if i < HOLLOW_MUSHROOMS else -1
+		var kind: String = RARE[kind_rng.randi() % RARE.size()] if hollow >= 0 else MushroomScript.pick_kind(kind_rng)
+		mushroom.setup_mushroom("Mushroom_%d" % i, kind)
+		mushroom.set_meta("hollow", hollow)
+		mushroom.position = _hollow_spot(hollow) if hollow >= 0 else _mushroom_spot()
 		mushroom.rotation.y = _rng.randf() * TAU
 		add_child(mushroom)
 		_mushrooms.append(mushroom)
+
+
+## Deep in one of the fog hollows.
+func _hollow_spot(hollow: int) -> Vector3:
+	var zone: Array = Terrain.FOG_HOLLOWS[hollow]
+	var c: Vector2 = zone[0]
+	var a := _rng.randf() * TAU
+	var d: float = sqrt(_rng.randf()) * zone[1] * 0.7
+	var x: float = c.x + cos(a) * d
+	var z: float = c.y + sin(a) * d
+	return Vector3(x, Terrain.height(x, z) + 0.3, z)
 
 
 ## Somewhere in the woods, not on roads, not in the lake, not in town.
@@ -716,32 +801,76 @@ func _build_animals() -> void:
 			add_child(critter)
 
 
-## Bear traps and mud pits, mostly near the paths where people actually walk.
+## Traps, hidden but fair: bear traps in the grass next to mushrooms (bait) and along paths,
+## mud in the dips, holes between boulders off the paths, brambles in the thick of the forest.
 func _build_traps() -> void:
-	for i in TRAP_COUNT:
-		var at := _mushroom_spot()
-		if i % 2 == 0:
-			# Put every other one right next to a footpath.
+	var n := 0
+	for i in BEAR_TRAPS:
+		var at: Vector3
+		if i % 2 == 0 and i / 2 < _mushrooms.size():
+			var m: Node3D = _mushrooms[(i * 7) % _mushrooms.size()]
+			var a := _rng.randf() * TAU
+			at = m.position + Vector3(cos(a), 0, sin(a)) * _rng.randf_range(0.7, 1.3)
+		else:
 			var path: Array = Terrain.PATHS[i % Terrain.PATHS.size()]
-			var a: Vector2 = path[i % (path.size() - 1)]
-			var b: Vector2 = path[i % (path.size() - 1) + 1]
-			var p := a.lerp(b, _rng.randf()) + Vector2(_rng.randf_range(-3, 3), _rng.randf_range(-3, 3))
-			at = Vector3(p.x, Terrain.height(p.x, p.y), p.y)
-		var trap := TrapScript.new()
-		trap.name = "Trap%d" % i
-		trap.build("bear trap" if i % 3 != 0 else "mud", Vector3(at.x, Terrain.height(at.x, at.z), at.z))
-		add_child(trap)
-	# Holes: big, obvious, with a warning sign. Only an idiot falls in. And then you need a rope.
+			var seg := i % (path.size() - 1)
+			var pa: Vector2 = path[seg]
+			var pb: Vector2 = path[seg + 1]
+			var side := (pb - pa).normalized().orthogonal() * _rng.randf_range(-3.0, 3.0)
+			var p2 := pa.lerp(pb, _rng.randf()) + side
+			at = Vector3(p2.x, 0, p2.y)
+		_add_trap("bear trap", at, n)
+		n += 1
+	var muds := 0
+	var tries := 0
+	while muds < MUD_PATCHES and tries < 3000:
+		tries += 1
+		var x := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
+		var z := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
+		if not Terrain.is_clear(x, z, 4.0) or not _is_dip(x, z):
+			continue
+		_add_trap("mud", Vector3(x, 0, z), n)
+		n += 1
+		muds += 1
 	for i in HOLE_COUNT:
 		var path: Array = Terrain.PATHS[i % Terrain.PATHS.size()]
-		var a: Vector2 = path[i % (path.size() - 1)]
-		var b: Vector2 = path[i % (path.size() - 1) + 1]
-		var side := (b - a).normalized().orthogonal() * (4.5 if i % 2 else -4.5)
-		var p := a.lerp(b, 0.3 + 0.4 * _rng.randf()) + side
-		var hole := TrapScript.new()
-		hole.name = "Hole%d" % i
-		hole.build("hole", Vector3(p.x, Terrain.height(p.x, p.y), p.y))
-		add_child(hole)
+		var seg := i % (path.size() - 1)
+		var pa: Vector2 = path[seg]
+		var pb: Vector2 = path[seg + 1]
+		var side := (pb - pa).normalized().orthogonal() * (_rng.randf_range(6.0, 12.0) * (1.0 if i % 2 else -1.0))
+		var p2 := pa.lerp(pb, 0.2 + 0.6 * _rng.randf()) + side
+		_add_trap("hole", Vector3(p2.x, 0, p2.y), n)
+		n += 1
+	var thickets := 0
+	tries = 0
+	while thickets < BRAMBLES and tries < 2000:
+		tries += 1
+		var x := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
+		var z := _rng.randf_range(-Terrain.SIZE * 0.38, Terrain.SIZE * 0.38)
+		if not Terrain.is_clear(x, z, 2.0):
+			continue
+		var bramble := BrambleScript.new()
+		bramble.name = "Bramble%d" % thickets
+		bramble.build(Vector3(x, Terrain.height(x, z), z), SEED + 900 + thickets)
+		add_child(bramble)
+		thickets += 1
+
+
+func _add_trap(kind: String, at: Vector3, n: int) -> void:
+	var trap := TrapScript.new()
+	trap.name = "Trap%d" % n
+	trap.build(kind, Vector3(at.x, Terrain.height(at.x, at.z), at.z), SEED + 600 + n)
+	add_child(trap)
+
+
+## A dip: lower than the ground around it (where water would gather).
+func _is_dip(x: float, z: float) -> bool:
+	var h := Terrain.height(x, z)
+	var around := 0.0
+	for i in 8:
+		var a := i * TAU / 8.0
+		around += Terrain.height(x + cos(a) * 14.0, z + sin(a) * 14.0)
+	return h < around / 8.0 - 0.7
 
 
 ## Every peer: a red flare rises and burns over the trees for a while.
