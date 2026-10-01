@@ -22,15 +22,16 @@ const Broadcast := preload("res://scripts/broadcast.gd")
 const City := preload("res://scripts/levels/city.gd")
 const FieldCamera := preload("res://scripts/field_camera.gd")
 const NewsStories := preload("res://scripts/levels/news_stories.gd")
+const StudioDressing := preload("res://scripts/levels/studio_dressing.gd")
 
 const FURNITURE := "res://assets/kenney/furniture-kit/"
 const DESK_ZONE := AABB(Vector3(-1.5, -1.0, -6.4), Vector3(3.0, 4.0, 1.8))
-const ANCHOR_SPOT := Vector3(0, 1.3, -5.4)
+const ANCHOR_SPOT := Vector3(0, 1.0, -5.4)
 ## Studio cameras: label, floor position, point it looks at, field of view.
 const CAMERAS := [
-	["CAM 1  wide", Vector3(0, 0, 1.55), Vector3(0, 1.25, -5.0), 50.0],
-	["CAM 2  left", Vector3(-4.5, 0, -0.8), Vector3(0, 1.3, -5.2), 38.0],
-	["CAM 3  close", Vector3(4.2, 0, -1.6), Vector3(0, 1.45, -5.3), 26.0],
+	["CAM 1  wide", Vector3(0, 0, 1.55), Vector3(0, 0.85, -5.0), 50.0],
+	["CAM 2  left", Vector3(-4.5, 0, -0.8), Vector3(0, 0.9, -5.2), 38.0],
+	["CAM 3  close", Vector3(4.2, 0, -1.6), Vector3(0, 0.95, -5.3), 26.0],
 ]
 const SHOT_RANGE := 30.0
 const STORY_BONUS := 3.0  # ratings per second while the breaking-news prop is on air
@@ -61,6 +62,9 @@ func _ready() -> void:
 	_light(Vector3(-2.5, 3.6, -3.0), 1.6, 7.0)
 	_light(Vector3(2.5, 3.6, -3.0), 1.6, 7.0)
 	_light(Vector3(0, 3.6, 6.0), 1.0, 10.0, Color(0.8, 0.85, 1.0))
+	_light(Vector3(-7, 3.6, 4.0), 0.8, 8.0, Color(1.0, 0.92, 0.8))
+	_light(Vector3(7, 3.6, 4.0), 0.8, 8.0, Color(1.0, 0.92, 0.8))
+	_light(Vector3(8.6, 3.4, -5.5), 0.9, 6.0, Color(1.0, 0.85, 0.7))
 	_build_room()
 	_build_set()
 	_build_cameras()
@@ -68,11 +72,16 @@ func _ready() -> void:
 	_build_broadcast()
 	_build_props()
 	City.new().build(self)
+	StudioDressing.new().build(self)
 	_news = NewsStories.new()
 	_news.build(self, City.STORY_SPOTS)
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--story="):
 			_news.forced = arg.trim_prefix("--story=").to_int()
+		elif arg.begins_with("--say="):  # testing: type this into the teleprompter after 2 s
+			get_tree().create_timer(2.0).timeout.connect(func(): request_subtitle.rpc_id(1, arg.trim_prefix("--say=")))
+		elif arg == "--rec":  # testing: press REC after 2 s
+			get_tree().create_timer(2.0).timeout.connect(func(): request_record.rpc_id(1, true))
 
 
 func make_environment() -> Environment:
@@ -180,7 +189,7 @@ func _field_tick(delta: float, director: Node, cam: Camera3D, blockers: Array[RI
 
 func _player_seen(cam: Camera3D, player: Node3D, blockers: Array[RID]) -> bool:
 	var feet := player.global_position
-	return _visible_to(cam, feet + Vector3.UP * 1.5, blockers) or _visible_to(cam, feet + Vector3.UP, blockers)
+	return _visible_to(cam, feet + Vector3.UP * 0.9, blockers) or _visible_to(cam, feet + Vector3.UP * 0.5, blockers)
 
 
 func server_reset() -> void:
@@ -264,7 +273,8 @@ func rules_text() -> String:
 [b]CONTROLS[/b]
  - Control desk: 1-4 or click TAKE, R record, T (or click) to type, Enter = next line, Esc leave.
  - Camera: mouse aims, mouse wheel zooms, Esc leaves.
- - Props: E / left click grab, Q throw."""
+ - Props: E / left click grab, Q throw. The studio is full of them (potatoes, a brick, tires, a
+   shopping cart, a fish...) and so is the street. Nobody knows why."""
 
 
 func event_is_good(event: int) -> bool:
@@ -462,9 +472,9 @@ func _build_set() -> void:
 	logo.position = Vector3(0, 2.6, -7.68)
 	add_child(logo)
 
-	var news_desk := Vector3(3, 1, 0.8)
-	_dress(_box(news_desk, Vector3(0, 0.5, -4.2), Color(0.75, 0.75, 0.8)), FURNITURE + "desk.glb", news_desk, 0.0, true)
-	_box(Vector3(3.1, 0.06, 0.9), Vector3(0, 1.03, -4.2), Color(0.1, 0.2, 0.45))
+	var news_desk := Vector3(3, 0.7, 0.8)
+	_dress(_box(news_desk, Vector3(0, 0.35, -4.2), Color(0.75, 0.75, 0.8)), FURNITURE + "desk.glb", news_desk, 0.0, true)
+	_box(Vector3(3.1, 0.06, 0.9), Vector3(0, 0.73, -4.2), Color(0.1, 0.2, 0.45))
 	_tape_rect(DESK_ZONE, Color(0.2, 0.9, 0.4))
 
 	# Yellow tape roughly where CAM 1's default shot ends. Cross it and you're on TV.
@@ -478,7 +488,7 @@ func _build_set() -> void:
 	# It stands beside CAM 1, out of every camera's default shot.
 	var prompter_pos := Vector3(-1.4, 1.55, 0.7)
 	_box(Vector3(0.08, 1.1, 0.08), Vector3(prompter_pos.x, 0.55, prompter_pos.z), Color(0.15, 0.15, 0.15))
-	var screen := _box(Vector3(1.5, 0.85, 0.08), prompter_pos, Color(0.03, 0.03, 0.05), false)
+	var screen := _box(Vector3(1.5, 0.85, 0.08), prompter_pos, Color(0.08, 0.08, 0.1), false)
 	screen.look_at_from_position(prompter_pos, prompter_pos * 2.0 - ANCHOR_SPOT)
 	_prompter_text = Label3D.new()
 	_prompter_text.text = "PROMPTER"
@@ -560,16 +570,15 @@ func _build_props() -> void:
 	_prop("VT_WEATHER", tape, Color(0.5, 0.8, 1.0), 0.4, Vector3(-5.6, 1.0, 6))
 	_prop("CUE_SHEET", Vector3(0.3, 0.02, 0.4), Color(1, 1, 0.85), 0.2, Vector3(-5.0, 1.0, 6.2))
 	var crate := Vector3(0.6, 0.6, 0.6)
-	var box_a := _prop("BOX_A", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 0.4, 3.5))
+	var box_a := _prop("BOX_A", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 0.4, 3.5), false)
 	_dress(box_a, FURNITURE + "cardboardBoxClosed.glb", crate, 0.0, true)
-	var box_b := _prop("BOX_B", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 1.1, 3.5))
+	var box_b := _prop("BOX_B", crate, Color(0.65, 0.48, 0.3), 3.0, Vector3(-8.5, 1.1, 3.5), false)
 	_dress(box_b, FURNITURE + "cardboardBoxClosed.glb", crate, 0.0, true)
 	var chair := Vector3(0.55, 0.9, 0.55)
-	var anchor_chair := _prop("ANCHOR_CHAIR", chair, Color(0.15, 0.15, 0.2), 6.0, Vector3(0.8, 0.5, -5.6))
+	var anchor_chair := _prop("ANCHOR_CHAIR", chair, Color(0.15, 0.15, 0.2), 6.0, Vector3(0.8, 0.5, -5.6), false)
 	_dress(anchor_chair, FURNITURE + "chairDesk.glb", chair)
-	_prop("COFFEE", Vector3(0.09, 0.14, 0.09), Color(0.95, 0.95, 0.95), 0.3, Vector3(0.6, 1.2, -4.2))
+	var cup := Vector3(0.12, 0.09, 0.14)
+	_dress(_prop("COFFEE", cup, Color.WHITE, 0.3, Vector3(0.6, 1.2, -4.2), false), "res://assets/kenney/food-kit/cup-coffee.glb", cup)
 	var cone := Vector3(0.35, 0.55, 0.35)
-	var traffic_cone := _prop("TRAFFIC_CONE", cone, Color(1, 0.45, 0.1), 1.0, Vector3(6.5, 0.4, 3.5))
+	var traffic_cone := _prop("TRAFFIC_CONE", cone, Color(1, 0.45, 0.1), 1.0, Vector3(6.5, 0.4, 3.5), false)
 	_dress(traffic_cone, "res://assets/kenney/car-kit/cone.glb", cone)
-	var plant := Vector3(0.4, 1.2, 0.4)
-	_dress(_prop("PLANT", plant, Color(0.2, 0.6, 0.25), 2.0, Vector3(-3.5, 0.7, -6.8)), FURNITURE + "pottedPlant.glb", plant)

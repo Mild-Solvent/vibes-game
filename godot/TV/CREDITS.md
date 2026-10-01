@@ -6,7 +6,7 @@ otherwise; each pack folder under `assets/` keeps its original licence file.
 | Asset | From | Licence | Used for | Folder |
 |---|---|---|---|---|
 | Mini Characters (10 characters, idle / walk / sprint) | [Kenney](https://kenney.nl/assets/mini-characters) | CC0 | the players; the MAYOR (breaking news); the guest on the sofa | `assets/kenney/mini-characters/` |
-| Furniture Kit (desk, desk chair, cross table, computer screens, bookcase, cardboard boxes, potted plant, cushioned bench, lounge chair) | [Kenney](https://kenney.nl/assets/furniture-kit) | CC0 | STANDBY... GO! (studio, theatre seats, throne) | `assets/kenney/furniture-kit/` |
+| Furniture Kit (desks, chairs, sofas, tables, screens, TVs, lamps, plants, rug, speakers, radio, laptop, coffee machine, coat rack, bin, toilet, boxes, bookcase, cushioned bench) | [Kenney](https://kenney.nl/assets/furniture-kit) | CC0 | studio set, interview corner, coffee station, theatre seats and throne | `assets/kenney/furniture-kit/` |
 | Car Kit (traffic cone, sedan, taxi, police car, van, delivery truck, garbage truck) | [Kenney](https://kenney.nl/assets/car-kit) | CC0 | studio TRAFFIC_CONE; parked cars in the city | `assets/kenney/car-kit/` |
 | City Kit (Roads) (road tiles, street lights, traffic lights, stop sign, construction cones and barrier, dumpster) | [Kenney](https://kenney.nl/assets/city-kit-roads) | CC0 | the city outside the studio | `assets/kenney/city-kit-roads/` |
 | City Kit (Commercial) (shops, offices, skyscrapers, café parasol) | [Kenney](https://kenney.nl/assets/city-kit-commercial) | CC0 | the city outside the studio | `assets/kenney/city-kit-commercial/` |

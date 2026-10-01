@@ -114,6 +114,11 @@ func _street_furniture() -> void:
 		level._place(ROADS + "construction-cone.glb", Vector3(23, 0, z), TILE)
 	level._place(ROADS + "construction-barrier.glb", Vector3(22.5, 0, -8), TILE, PI / 2.0, true)
 
+	# Paved plaza and an asphalt parking lot with painted bays.
+	level._box(Vector3(20, 0.02, 30), Vector3(38, -0.015, 26), Color(0.62, 0.6, 0.56), false)
+	level._box(Vector3(20, 0.02, 9), Vector3(38, -0.015, -6.5), Color(0.25, 0.26, 0.28), false)
+	for x in [31.0, 35.0, 39.0, 43.0, 47.0]:
+		level._box(Vector3(0.12, 0.02, 4), Vector3(x, -0.005, -6.5), Color(0.9, 0.9, 0.9), false)
 	# The plaza: trees, planters, café parasols.
 	for p in [Vector2(36, 20), Vector2(46, 22), Vector2(34, 34), Vector2(46, 34), Vector2(40, 40)]:
 		level._place(HOUSES + "tree-large.glb", Vector3(p.x, 0, p.y), TILE, p.x, true)
