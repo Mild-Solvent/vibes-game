@@ -196,35 +196,6 @@ func _pa(line: int) -> void:
 # --- building: walls and floors ------------------------------------------------------------------
 
 
-## A wall along X (at z = `at`) or along Z (at x = `at`) from `a` to `b`, y0..y1, painted two-tone
-## (`lower` up to `split`, `upper` above), with openings [from, to, bottom y, top y].
-func _wall_run(along_x: bool, at: float, a: float, b: float, y0: float, y1: float, gaps: Array,
-		lower: Material, upper: Material, split: float, thick := 0.2) -> void:
-	var cursor := a
-	var sorted := gaps.duplicate()
-	sorted.sort_custom(func(p, q): return p[0] < q[0])
-	for g in sorted:
-		_wall_piece(along_x, at, cursor, g[0], y0, y1, lower, upper, split, thick)
-		_wall_piece(along_x, at, g[0], g[1], y0, g[2], lower, upper, split, thick)
-		_wall_piece(along_x, at, g[0], g[1], g[3], y1, lower, upper, split, thick)
-		cursor = g[1]
-	_wall_piece(along_x, at, cursor, b, y0, y1, lower, upper, split, thick)
-
-
-func _wall_piece(along_x: bool, at: float, a: float, b: float, y0: float, y1: float,
-		lower: Material, upper: Material, split: float, thick: float) -> void:
-	if b - a < 0.01 or y1 - y0 < 0.01:
-		return
-	var parts := [[y0, minf(y1, split), lower], [maxf(y0, split), y1, upper]]
-	for part in parts:
-		if part[1] - part[0] < 0.01:
-			continue
-		if along_x:
-			_slab(Vector3(a, part[0], at - thick / 2.0), Vector3(b, part[1], at + thick / 2.0), part[2])
-		else:
-			_slab(Vector3(at - thick / 2.0, part[0], a), Vector3(at + thick / 2.0, part[1], b), part[2])
-
-
 func _build_shell() -> void:
 	var door := [-1.2, 1.2, FY, FY + 2.6]
 	var window := [-17.6, -16.2, FY + 0.5, FY + 2.6]

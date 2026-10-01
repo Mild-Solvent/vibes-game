@@ -525,8 +525,9 @@ func _build_cart() -> void:
 		stick.position = p + Vector3(0, 0.1, 0)
 		stick.rotation.x = 0.5
 		_root.add_child(stick)
-	_interactable("LeverOut", Vector3(0.6, 1.2, 0.6), Vector3(1.4, 0.6, 7.0), "pull the lever (send the cart)", _use_lever)
-	_interactable("LeverIn", Vector3(0.6, 1.2, 0.6), Vector3(1.9, 0.6, -14.8), "pull the lever (send the cart)", _use_lever)
+	var prompt := "pull the lever (send the cart)"
+	_interactable("LeverOut", Vector3(0.6, 1.2, 0.6), Vector3(1.4, 0.6, 7.0), prompt, _use_lever)
+	_interactable("LeverIn", Vector3(0.6, 1.2, 0.6), Vector3(1.9, 0.6, -14.8), prompt, _use_lever)
 
 
 func _build_lights() -> void:
