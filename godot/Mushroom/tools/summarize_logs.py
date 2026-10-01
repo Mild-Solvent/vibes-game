@@ -3,8 +3,8 @@
     python summarize_logs.py <session-....log | folder> [more files...]
 
 For each log: who/what/when, connection quality (ping, bandwidth, FPS), voice health (queue,
-skips, clears), lag spikes, deaths and other events, errors, and every F8 bug marker with the
-ten seconds of log lines before it.
+skips, clears), lag spikes, deaths and other events, errors, and every F8 recording, with the
+ten seconds of log lines before each F8 debug recording started or stopped.
 """
 import os
 import re
@@ -81,11 +81,11 @@ def summarize(path):
         print(f"    {n}x {text[:150]}")
 
     for i, (t, kind, text) in enumerate(lines):
-        if kind != "BUG":
+        if kind != "REC":
             continue
-        print(f"  BUG MARKER {t}: {text}")
+        print(f"  F8 {t}: {text}")
         for t2, k2, x2 in lines[max(0, i - 40):i]:
-            if secs(t) - secs(t2) <= 10 and k2 != "OUT":
+            if secs(t) - secs(t2) <= 10 and k2 not in ("OUT", "SNAP"):
                 print(f"      {t2} {k2} {x2[:140]}")
 
 
@@ -94,7 +94,7 @@ def main():
     for arg in sys.argv[1:] or ["."]:
         if os.path.isdir(arg):
             paths += sorted(os.path.join(arg, f) for f in os.listdir(arg)
-                            if f.startswith("session-") and f.endswith(".log"))
+                            if (f.startswith("session-") or f.startswith("debug-")) and f.endswith(".log"))
         else:
             paths.append(arg)
     for p in paths:
