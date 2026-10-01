@@ -5,31 +5,43 @@ extends RefCounted
 ##
 ## World units are metres; the camp is at the origin.
 
-const SIZE := 480.0  # the map is SIZE x SIZE, centred on the camp
-const STEP := 2.0  # grid spacing of the heightfield
+const SIZE := 1100.0  # the map is SIZE x SIZE, centred on the camp
+const STEP := 4.0  # grid spacing of the heightfield
 const WATER_Y := -1.2
 const SEED := 20261001
 
 ## Flat places: [name, centre (x, z), radius, height]
 const PLACES := [
 	["camp", Vector2(0, 0), 16.0, 0.6],
-	["village", Vector2(170, 40), 38.0, 1.0],
-	["casino", Vector2(180, -62), 20.0, 0.8],
-	["witch", Vector2(-170, -150), 18.0, -0.4],
-	["ruin", Vector2(-62, 128), 10.0, 6.0],
+	["village", Vector2(380, 110), 40.0, 1.0],
+	["casino", Vector2(420, -110), 20.0, 0.8],
+	["witch", Vector2(-360, -300), 18.0, -0.4],
+	["ruin", Vector2(-140, 290), 10.0, 6.0],
+	["sanatorium", Vector2(260, 370), 34.0, 3.0],
+	["mine", Vector2(-410, 170), 16.0, 9.0],
+	["crypt", Vector2(130, -400), 16.0, 1.5],
 ]
 ## Roads the car can use (wide, dirt) and footpaths (narrow), as polylines.
 const ROADS := [
-	[Vector2(0, 0), Vector2(55, 12), Vector2(115, 26), Vector2(170, 40)],
-	[Vector2(115, 26), Vector2(150, -20), Vector2(180, -62)],
+	[Vector2(0, 0), Vector2(70, 25), Vector2(160, 30), Vector2(250, 70), Vector2(330, 95), Vector2(380, 110)],
+	[Vector2(330, 95), Vector2(370, 10), Vector2(420, -110)],
+	[Vector2(160, 30), Vector2(185, 150), Vector2(220, 280), Vector2(260, 370)],
+	[Vector2(0, 0), Vector2(30, -110), Vector2(-20, -230), Vector2(60, -330), Vector2(130, -400)],
+	[Vector2(0, 0), Vector2(-120, 40), Vector2(-250, 90), Vector2(-340, 150), Vector2(-410, 170)],
 ]
+## Footpaths fork and loop on purpose: it's easy to get lost.
 const PATHS := [
-	[Vector2(0, 0), Vector2(-35, -35), Vector2(-95, -80), Vector2(-135, -128), Vector2(-170, -150)],
-	[Vector2(-10, 5), Vector2(-30, 55), Vector2(-50, 100), Vector2(-62, 128)],
-	[Vector2(8, -6), Vector2(30, -55), Vector2(55, -78)],
+	[Vector2(-20, -230), Vector2(-120, -250), Vector2(-230, -300), Vector2(-300, -280), Vector2(-360, -300)],
+	[Vector2(-10, 5), Vector2(-50, 110), Vector2(-90, 200), Vector2(-140, 290)],
+	[Vector2(-90, 200), Vector2(-200, 230), Vector2(-250, 90)],
+	[Vector2(-50, 110), Vector2(40, 160), Vector2(160, 30)],
+	[Vector2(-120, -250), Vector2(-160, -120), Vector2(-120, 40)],
+	[Vector2(30, -110), Vector2(110, -150), Vector2(150, -210)],
+	[Vector2(220, 280), Vector2(120, 330), Vector2(-20, 360), Vector2(-140, 290)],
 ]
-const LAKE := [Vector2(70, -115), 38.0]
-const HILL := [Vector2(-125, 55), 42.0, 24.0]  # centre, radius, height (steep on the east side)
+const LAKE := [Vector2(150, -230), 62.0]
+const ISLAND := [Vector2(150, -230), 13.0]  # middle of the lake
+const HILL := [Vector2(-250, 0), 60.0, 30.0]  # centre, radius, height (steep on the east side)
 
 const ROAD_HALF_WIDTH := 4.0
 const PATH_HALF_WIDTH := 1.3
@@ -60,10 +72,13 @@ static func height(x: float, z: float) -> float:
 			bump *= smoothstep(1.0, 0.85, d * 1.6)  # sheer drop
 		h += bump
 
-	# The lake bowl.
+	# The lake bowl, with a little island in the middle.
 	var lake_d := p.distance_to(LAKE[0]) / LAKE[1]
 	if lake_d < 1.3:
 		h = lerpf(h, -4.5, smoothstep(1.3, 0.6, lake_d))
+		var island_d := p.distance_to(ISLAND[0]) / ISLAND[1]
+		if island_d < 1.6:
+			h = lerpf(h, 0.4, smoothstep(1.6, 0.8, island_d))
 
 	# Mountains around the edge.
 	var edge := maxf(absf(x), absf(z)) / (SIZE / 2.0)
@@ -121,6 +136,11 @@ static func is_clear(x: float, z: float, margin := 0.0) -> bool:
 	if p.distance_to(LAKE[0]) < LAKE[1] * 1.05 + margin:
 		return false
 	return absf(x) < SIZE * 0.4 and absf(z) < SIZE * 0.4
+
+
+## True when `pos` is under the lake's surface (the only real water on the map).
+static func in_water(pos: Vector3) -> bool:
+	return pos.y < WATER_Y and Vector2(pos.x, pos.z).distance_to(LAKE[0]) < LAKE[1] * 1.25
 
 
 static func place_centre(place_name: String) -> Vector3:

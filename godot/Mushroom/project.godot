@@ -20,10 +20,17 @@ run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/enable_input=true
+
 [autoload]
 
 Net="*res://scripts/net.gd"
 Team="*res://scripts/team.gd"
+Noise="*res://scripts/noise.gd"
+Voice="*res://scripts/voice.gd"
+Sfx="*res://scripts/sfx.gd"
 
 [display]
 

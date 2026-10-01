@@ -4,7 +4,7 @@ extends "res://scripts/prop.gd"
 ## identified ("Is it safe?" "My friend ate one and he's fine. Mostly.").
 ## Thrown too hard too often, it breaks into bits.
 
-enum Effect { FOOD, TRIP, STRONG, POISON, WITCH }
+enum Effect { FOOD, TRIP, STRONG, POISON, WITCH, CURE }
 
 const BREAK_SPEED := 6.0
 const BREAK_HITS := 3
@@ -37,6 +37,15 @@ const KINDS := {
 		"Devil's cigar", false, "tall"],
 	"witch_finger": [Effect.WITCH, 0, Color(0.15, 0.1, 0.2), Color(0.3, 0.6, 0.25), 0.04, 0.34, 0.03,
 		"Witch's finger", true, "finger"],
+	# Cure ingredients the witch sends you for. They only grow in the scary places, never randomly.
+	"mothers_mould": [Effect.CURE, 0, Color(0.55, 0.62, 0.5), Color(0.4, 0.45, 0.38), 0.13, 0.05, 0.06,
+		"Mother's mould", false, "ball"],
+	"kobold_cap": [Effect.CURE, 0, Color(0.85, 1.0, 0.3), Color(0.6, 0.7, 0.3), 0.1, 0.12, 0.03,
+		"Kobold cap", true, "dome"],
+	"bone_morel": [Effect.CURE, 0, Color(0.95, 0.92, 0.8), Color(0.9, 0.88, 0.8), 0.07, 0.2, 0.03,
+		"Bone morel", false, "tall"],
+	"drowned_chanterelle": [Effect.CURE, 0, Color(0.2, 0.75, 0.7), Color(0.3, 0.6, 0.6), 0.09, 0.08, 0.03,
+		"Drowned chanterelle", true, "dome"],
 }
 ## How often each kind spawns (rarer = smaller).
 const WEIGHTS := {

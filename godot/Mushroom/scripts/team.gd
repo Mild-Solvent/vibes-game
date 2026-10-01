@@ -117,6 +117,8 @@ func apply_mushroom(peer_id: int, effect: int, display_name: String) -> String:
 			if status_of(peer_id) != Status.POISONED:
 				set_status(peer_id, Status.TRIPPING, TRIP_SECONDS)
 			return "%s. Oh. Oh no. The trees are breathing." % display_name
+		Mushroom.Effect.CURE:
+			return "%s. Tastes like a basement. You should have given that to the witch." % display_name
 		Mushroom.Effect.STRONG:
 			set_status(peer_id, Status.PASSED_OUT, PASS_OUT_SECONDS)
 			return "%s. You see the face of God, then the ground." % display_name
