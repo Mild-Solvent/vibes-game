@@ -1,7 +1,6 @@
 # Godot
 .godot/
 *.tmp
-export_presets.cfg
 /godot/*/build/
 # The Godot editor lives here locally; it's not committed
 /godot/engine/*
@@ -9,3 +8,5 @@ export_presets.cfg
 # OS
 .DS_Store
 Thumbs.db
+# Exported game builds
+/builds/
