@@ -93,6 +93,7 @@ func _setup_input() -> void:
 	_bind_mouse("grab", MOUSE_BUTTON_LEFT)
 	_bind_keys("throw", [KEY_Q])
 	_bind_mouse("throw", MOUSE_BUTTON_RIGHT)
+	_bind_keys("taste", [KEY_F])
 
 
 func _ensure_action(action: String) -> void:

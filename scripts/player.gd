@@ -19,6 +19,7 @@ var color := Color.WHITE
 var head: Node3D
 var camera: Camera3D
 var _held = null
+var _spawn_position := Vector3.ZERO
 var _visuals: Array[VisualInstance3D] = []
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
@@ -34,6 +35,7 @@ func setup(id: int, player_name: String, body_color: Color) -> void:
 
 
 func _ready() -> void:
+	_spawn_position = position
 	if not is_multiplayer_authority():
 		return
 	camera.current = true
@@ -71,7 +73,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	if global_position.y < -20.0:
-		global_position = Vector3(0, 1, 5)
+		position = _spawn_position
 		velocity = Vector3.ZERO
 
 
@@ -93,6 +95,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-85), deg_to_rad(85))
 	elif event.is_action_pressed("grab"):
 		_toggle_grab()
+	elif event.is_action_pressed("taste"):
+		if is_instance_valid(_held) and _held.has_method("request_taste"):
+			_held.request_taste.rpc_id(1)
+			_held = null
 	elif event.is_action_pressed("throw"):
 		if is_instance_valid(_held):
 			_held.request_release.rpc_id(1, true)

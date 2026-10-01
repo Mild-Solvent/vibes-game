@@ -1,25 +1,65 @@
 extends CanvasLayer
-## Main menu (host / join) and the in-game HUD (show clock, ratings, warnings).
+## Main menu (pick a show, host / join) and the in-game HUD.
 
-signal host_pressed(player_name: String)
+signal host_pressed(player_name: String, mode: int)
 signal join_pressed(player_name: String, address: String)
 
-const ShowDirector := preload("res://scripts/show_director.gd")
+const TRIP_SECONDS := 25.0
+const TRIP_SHADER := """
+shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture;
+uniform float strength = 0.0;
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	uv.x += sin(uv.y * 14.0 + TIME * 2.3) * 0.012 * strength;
+	uv.y += cos(uv.x * 11.0 + TIME * 1.7) * 0.012 * strength;
+	vec3 c = texture(screen_tex, uv).rgb;
+	vec3 ghost = texture(screen_tex, uv + vec2(sin(TIME) * 0.02, cos(TIME * 0.7) * 0.02) * strength).rgb;
+	float t = sin(TIME * 0.9) * 0.5 + 0.5;
+	vec3 hue = mix(c.gbr, c.brg, t);
+	COLOR = vec4(mix(c, mix(hue, ghost, 0.35), strength), 1.0);
+}
+"""
 
 var _menu: Control
 var _game: Control
 var _name_edit: LineEdit
 var _address_edit: LineEdit
+var _mode_select: OptionButton
 var _status: Label
 var _phase_label: Label
-var _ratings: ProgressBar
+var _score_name: Label
+var _score: ProgressBar
 var _event_label: Label
+var _guide: Label
+var _toast: Label
+var _trip_rect: ColorRect
+var _trip_left := 0.0
+var _toast_left := 0.0
 
 
 func _ready() -> void:
+	add_to_group("hud")
 	_build_menu()
 	_build_game()
 	show_menu()
+
+
+func _process(delta: float) -> void:
+	if _trip_left > 0.0:
+		_trip_left -= delta
+		var strength := clampf(_trip_left / 4.0, 0.0, 1.0)  # fades out over the last 4 s
+		_trip_rect.visible = _trip_left > 0.0
+		(_trip_rect.material as ShaderMaterial).set_shader_parameter("strength", strength)
+	if _toast_left > 0.0:
+		_toast_left -= delta
+		_toast.visible = _toast_left > 0.0
+
+
+func set_levels(titles: Array) -> void:
+	_mode_select.clear()
+	for t in titles:
+		_mode_select.add_item(t)
 
 
 func show_menu() -> void:
@@ -45,27 +85,35 @@ func get_player_name() -> String:
 	return _name_edit.text
 
 
-func update_show(phase: int, time_left: float, ratings: float, event: int) -> void:
-	var secs := maxi(int(ceil(time_left)), 0)
-	var clock := "%d:%02d" % [secs / 60, secs % 60]
-	match phase:
-		ShowDirector.Phase.PREP:
-			_phase_label.text = "PREP  %s  -  anchor to the green tape, crew out of shot" % clock
-			_phase_label.modulate = Color(1, 0.85, 0.3)
-		ShowDirector.Phase.LIVE:
-			_phase_label.text = "● ON AIR  %s" % clock
-			_phase_label.modulate = Color(1, 0.35, 0.35)
-		ShowDirector.Phase.WRAP:
-			_phase_label.text = "WRAP  -  final ratings %d%%" % int(ratings)
-			_phase_label.modulate = Color(0.8, 0.8, 0.8)
-	_ratings.value = ratings
-	match event:
-		ShowDirector.Event.DEAD_AIR:
-			_event_label.text = "DEAD AIR! Nobody is at the desk!"
-		ShowDirector.Event.CREW_IN_SHOT:
-			_event_label.text = "CREW IN SHOT! Get out of the frame!"
-		_:
-			_event_label.text = ""
+func set_mode(mode: int) -> void:
+	_mode_select.select(mode)
+
+
+func get_mode() -> int:
+	return _mode_select.selected
+
+
+func update_state(phase_text: String, score_name: String, score: float, event_text: String, guide: String) -> void:
+	_phase_label.text = phase_text
+	_score_name.text = score_name
+	_score.value = score
+	_event_label.text = event_text
+	_guide.text = guide
+
+
+## Called through the "hud" group when this player tasted a mushroom.
+func on_tasted(edible: bool, mushroom_name: String) -> void:
+	if edible:
+		_show_toast("Mmm. %s. Tasty, and you're fine." % mushroom_name)
+	else:
+		_show_toast("That was a %s..." % mushroom_name)
+		_trip_left = TRIP_SECONDS
+
+
+func _show_toast(text: String) -> void:
+	_toast.text = text
+	_toast.visible = true
+	_toast_left = 4.0
 
 
 func _build_menu() -> void:
@@ -83,19 +131,22 @@ func _build_menu() -> void:
 	_menu.add_child(center)
 
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(420, 0)
+	box.custom_minimum_size = Vector2(440, 0)
 	box.add_theme_constant_override("separation", 10)
 	center.add_child(box)
 
-	var title := _label("STANDBY... GO!", 48)
-	box.add_child(title)
-	box.add_child(_label("Everyone's watching. Nobody's ready.", 18))
+	box.add_child(_label("STANDBY... GO!", 48))
+	box.add_child(_label("Friendslop demos. Everyone's watching. Nobody's ready.", 16))
 
 	box.add_child(_label("Your name", 16, HORIZONTAL_ALIGNMENT_LEFT))
 	_name_edit = LineEdit.new()
 	_name_edit.text = "Crew %d" % randi_range(1, 99)
 	_name_edit.max_length = 20
 	box.add_child(_name_edit)
+
+	box.add_child(_label("Show (host picks)", 16, HORIZONTAL_ALIGNMENT_LEFT))
+	_mode_select = OptionButton.new()
+	box.add_child(_mode_select)
 
 	box.add_child(_label("Host address (to join)", 16, HORIZONTAL_ALIGNMENT_LEFT))
 	_address_edit = LineEdit.new()
@@ -108,7 +159,7 @@ func _build_menu() -> void:
 	var host_button := Button.new()
 	host_button.text = "Host (port %d)" % Net.DEFAULT_PORT
 	host_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	host_button.pressed.connect(func(): host_pressed.emit(_name_edit.text))
+	host_button.pressed.connect(func(): host_pressed.emit(_name_edit.text, _mode_select.selected))
 	buttons.add_child(host_button)
 	var join_button := Button.new()
 	join_button.text = "Join"
@@ -119,7 +170,7 @@ func _build_menu() -> void:
 	_status = _label("", 16)
 	box.add_child(_status)
 	var controls := "WASD move · Shift sprint · Space jump\n"
-	controls += "E / left click grab & drop · Q / right click throw\n"
+	controls += "E / left click grab & drop · Q / right click throw · F taste\n"
 	controls += "Esc frees the mouse, click to recapture"
 	box.add_child(_label(controls, 14))
 
@@ -129,6 +180,17 @@ func _build_game() -> void:
 	_game.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_game.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_game)
+
+	_trip_rect = ColorRect.new()
+	_trip_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_trip_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shader := Shader.new()
+	shader.code = TRIP_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	_trip_rect.material = mat
+	_trip_rect.visible = false
+	_game.add_child(_trip_rect)
 
 	var top := VBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -141,22 +203,27 @@ func _build_game() -> void:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(spacer)
 
-	_phase_label = _label("", 24)
+	_phase_label = _label("", 22)
 	top.add_child(_phase_label)
 
-	_ratings = ProgressBar.new()
-	_ratings.custom_minimum_size = Vector2(320, 18)
-	_ratings.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_ratings.show_percentage = false
-	_ratings.max_value = 100
-	_ratings.value = 50
-	_ratings.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(_ratings)
-	top.add_child(_label("RATINGS", 12))
+	_score = ProgressBar.new()
+	_score.custom_minimum_size = Vector2(320, 18)
+	_score.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_score.show_percentage = false
+	_score.max_value = 100
+	_score.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(_score)
+	_score_name = _label("", 12)
+	top.add_child(_score_name)
 
 	_event_label = _label("", 30)
 	_event_label.modulate = Color(1, 0.25, 0.25)
 	top.add_child(_event_label)
+
+	_toast = _label("", 22)
+	_toast.modulate = Color(1, 0.9, 0.5)
+	_toast.visible = false
+	top.add_child(_toast)
 
 	var crosshair_holder := CenterContainer.new()
 	crosshair_holder.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -164,10 +231,17 @@ func _build_game() -> void:
 	_game.add_child(crosshair_holder)
 	crosshair_holder.add_child(_label("+", 22))
 
-	var help := _label("E grab · Q throw · Esc mouse", 14, HORIZONTAL_ALIGNMENT_LEFT)
+	var help := _label("E grab · Q throw · F taste · Esc mouse", 14, HORIZONTAL_ALIGNMENT_LEFT)
 	help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	help.modulate = Color(1, 1, 1, 0.6)
 	_game.add_child(help)
+
+	_guide = _label("", 13, HORIZONTAL_ALIGNMENT_RIGHT)
+	_guide.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_guide.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_guide.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	_guide.modulate = Color(0.85, 1, 0.85, 0.85)
+	_game.add_child(_guide)
 
 
 func _label(text: String, size: int, align := HORIZONTAL_ALIGNMENT_CENTER) -> Label:

@@ -7,7 +7,8 @@ const MAX_HOLD_SPEED := 14.0
 const THROW_SPEED := 10.0
 
 var holder_id := 0
-var _home := Vector3.ZERO
+var removed := false  # eaten / used up; parked out of sight until the round resets
+var _home := Transform3D.IDENTITY
 
 
 func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mass: float) -> void:
@@ -37,20 +38,35 @@ func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mas
 
 
 func _ready() -> void:
-	_home = position
+	_home = transform
+
+
+## Host only.
+func reset_to_home() -> void:
+	_drop()
+	removed = false
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	transform = _home
+
+
+## Host only: take the prop out of play (it stays in the tree so node paths keep matching).
+func remove_from_play() -> void:
+	_drop()
+	removed = true
+	linear_velocity = Vector3.ZERO
+	position = Vector3(position.x, -100.0, position.z)
 
 
 func _physics_process(_delta: float) -> void:
-	var simulating := multiplayer.is_server()
+	var simulating := multiplayer.is_server() and not removed
 	if freeze == simulating:
 		freeze = not simulating
 	if not simulating:
 		return
 
-	if global_position.y < -10.0:
-		_drop()
-		linear_velocity = Vector3.ZERO
-		position = _home
+	if position.y < -10.0:
+		reset_to_home()
 		return
 
 	if holder_id == 0:
@@ -66,7 +82,7 @@ func _physics_process(_delta: float) -> void:
 
 @rpc("any_peer", "call_local", "reliable")
 func request_grab() -> void:
-	if not multiplayer.is_server():
+	if not multiplayer.is_server() or removed:
 		return
 	var sender := _sender_id()
 	if holder_id != 0 and holder_id != sender and _find_holder() != null:
