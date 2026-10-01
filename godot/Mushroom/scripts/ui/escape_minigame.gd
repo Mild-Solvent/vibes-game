@@ -8,7 +8,8 @@ extends Control
 ## Holes have no minigame: you need a friend with a rope.
 
 const MUD_NEEDED := 7
-const MUD_MISSES := 4
+const MUD_MISSES := 7
+const MUD_GRACE := 2.0  # seconds after getting stuck before presses count (you were just walking)
 const BEAR_HOLD := 1.4
 const BEAR_SWEET := 0.22  # radians either side of the sweet spot
 
@@ -18,6 +19,7 @@ var _t := 0.0
 var _progress := 0
 var _misses := 0
 var _expect_a := true
+var _last_press := 0
 # bear trap
 var _dial := 0.0
 var _sweet := 0.0
@@ -138,11 +140,16 @@ func _update_mud() -> void:
 	_window.size = Vector2(_track.size.x * 0.28, _track.size.y)
 	_marker.position.x = _mud_cursor() * (_track.size.x - _marker.size.x)
 	_bar.value = 100.0 * _progress / MUD_NEEDED
-	_info.text = "Press the letter when the marker is in the green. %d/%d   sunk: %s" % [
+	_info.text = ("Get ready..." if _t < MUD_GRACE else "Tap the letter ONCE when the marker is in the green.") + "   %d/%d   sunk: %s" % [
 		_progress, MUD_NEEDED, "▮".repeat(_misses) + "▯".repeat(MUD_MISSES - _misses)]
 
 
 func _mud_press(is_a: bool) -> void:
+	if _t < MUD_GRACE:
+		return
+	var now := Time.get_ticks_msec()
+	var mashing := now - _last_press < 220  # held-down / mashed walking keys don't count
+	_last_press = now
 	var c := _mud_cursor()
 	if is_a == _expect_a and c > 0.36 and c < 0.64:
 		_progress += 1
@@ -150,7 +157,7 @@ func _mud_press(is_a: bool) -> void:
 		Sfx.play("splash", Vector3.INF, -8.0)
 		if _progress >= MUD_NEEDED:
 			Team.request_self_free.rpc_id(1)
-	else:
+	elif not mashing:
 		_misses += 1
 		Sfx.play("splash", Vector3.INF, 0.0)
 		if _misses >= MUD_MISSES:

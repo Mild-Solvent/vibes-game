@@ -185,6 +185,8 @@ func _physics_process(delta: float) -> void:
 		_ghost_move(delta, captured)
 		return
 	if s == Team.Status.PASSED_OUT:
+		_fall_speed = 0.0  # being dragged around never counts as a fall
+		_alive_for = 0.0
 		var dragger := _player(Team.dragged_by(peer_id))
 		if dragger:
 			# A friend has you by the collar.

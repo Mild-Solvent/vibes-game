@@ -36,7 +36,8 @@ func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mas
 	sync.name = "Sync"
 	var config := SceneReplicationConfig.new()
 	# Only send changes: most of the forest's props lie still most of the time.
-	for property in [NodePath(".:position"), NodePath(".:rotation")]:
+	# holder_id too: clients need to know who holds what (hints, throwing, inspecting, poses).
+	for property in [NodePath(".:position"), NodePath(".:rotation"), NodePath(".:holder_id")]:
 		config.add_property(property)
 		config.property_set_replication_mode(property, SceneReplicationConfig.REPLICATION_MODE_ON_CHANGE)
 	sync.replication_config = config
