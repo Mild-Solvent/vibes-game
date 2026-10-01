@@ -428,6 +428,7 @@ func setup_mushroom(prop_name: String, mushroom_kind: String) -> void:
 
 ## Every peer: handled mushrooms bruise (some species change colour where you hold them).
 func _process(delta: float) -> void:
+	super._process(delta)
 	var colour = FEATURES.get(kind, {}).get("bruise")
 	if colour == null or _visual == null:
 		return

@@ -242,8 +242,15 @@ func _update_game() -> void:
 		tint = Color(0.75, 1.0, 0.7)
 		dark = maxf(dark, 0.5 * (1.0 - poison / Team.POISON_SECONDS))
 		lines.append("POISONED - dead in %d s - MEDKIT (H) or the witch" % int(ceil(poison)))
-	if Team.stuck_in(id) != "":
-		lines.append("STUCK in a %s - a friend has to pull you out" % Team.stuck_in(id))
+	if not Team.rescue.is_empty() and (Team.rescue["target"] == id or Team.rescue["by"] == id):
+		var bar := int(float(Team.rescue["progress"]) * 20.0)
+		var other: int = Team.rescue["by"] if Team.rescue["target"] == id else Team.rescue["target"]
+		var other_name: String = Team.players.get(other, {}).get("name", "?")
+		var head := ("%s is pulling you out! Wiggle!" % other_name) if Team.rescue["target"] == id \
+			else ("Pulling %s out... keep holding E" % other_name)
+		lines.append("%s\n[%s%s]" % [head, "█".repeat(bar), "░".repeat(20 - bar)])
+	elif Team.stuck_in(id) != "":
+		lines.append("STUCK in a %s - a friend has to pull you out (they hold E on you)" % Team.stuck_in(id))
 	if Team.police_left > 0.0:
 		var missing: String = Team.players.get(Team.missing_peer, {}).get("name", "someone")
 		lines.append("POLICE coming in %d s - find %s!" % [int(Team.police_left), missing])

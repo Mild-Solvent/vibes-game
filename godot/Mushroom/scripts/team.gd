@@ -47,6 +47,11 @@ var police_left := -1.0  # counting down while a friend is missing (-1 = nobody 
 var missing_peer := 0
 var cheats := false  # the host can switch these on from the pause menu (for testing alone)
 var earned := 0  # everything ever made this run (for the game over screen)
+## A rescue in progress: {"target": peer, "by": peer, "progress": 0..1} or {} (synced).
+var rescue := {}
+var _rescue_last_pull := 0.0
+const RESCUE_SECONDS := 1.6  # holding E this long pulls a friend out (their wiggling helps)
+const RESCUE_RANGE := 4.6
 var _deaths: Array[String] = []  # host: "Adam - the Hungry Hag", this run
 ## peer id -> {"name", "status", "left", "poison", "trip", "out", "dead", items...}
 var players := {}
@@ -69,6 +74,9 @@ func _process(delta: float) -> void:
 		police_left = maxf(police_left - delta, 0.0)
 	if not multiplayer.is_server():
 		return
+	if not rescue.is_empty() and Time.get_ticks_msec() / 1000.0 - _rescue_last_pull > 0.6:
+		rescue = {}  # they let go
+		dirty = true
 	var now := Time.get_ticks_msec() / 1000.0
 	var due := _pending.filter(func(e): return e["at"] <= now)
 	if not due.is_empty():
@@ -496,20 +504,73 @@ func request_cheat(what: String) -> void:
 				level.cheat(what, peer)
 
 
-## Pull a stuck friend out of a trap or the mud (you can't do it yourself).
-@rpc("any_peer", "call_local", "reliable")
-func request_free(target: int) -> void:
+## Pull a stuck friend out of a trap, the mud or a hole: hold E on them (from a few metres away,
+## so you don't get stuck too). Sent every ~0.1 s while E is held; the host adds up the pulling.
+@rpc("any_peer", "call_local", "unreliable_ordered")
+func request_pull(target: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer := _sender()
 	if peer == target or not is_alive(peer) or stuck_in(target) == "":
 		return
-	var what := stuck_in(target)
-	if what == "hole" and not take(peer, "rope"):
-		tell(peer, "%s is down a hole. You need a ROPE (Jano's shop) to get them out." % players[target]["name"])
+	var a := _player_pos(peer)
+	var b := _player_pos(target)
+	if a == Vector3.INF or b == Vector3.INF or a.distance_to(b) > RESCUE_RANGE + 0.5:
 		return
-	set_stuck(target, "")
-	tell(0, "%s pulled %s out of the %s." % [players[peer]["name"], players[target]["name"], what])
+	if rescue.is_empty() or rescue.get("target") != target:
+		if stuck_in(target) == "hole" and not take(peer, "rope"):
+			tell(peer, "%s is down a hole. You need a ROPE (Jano's shop) to get them out." % players[target]["name"])
+			return
+		rescue = {"target": target, "by": peer, "progress": 0.0}
+		tell(target, "%s is pulling you out! Wiggle (A/D in the green) to help!" % players[peer]["name"])
+	if rescue["by"] != peer:
+		return
+	_rescue_last_pull = Time.get_ticks_msec() / 1000.0
+	_add_rescue(0.1 / RESCUE_SECONDS)
+
+
+## The stuck player wiggled well (a good press in the mud game): it helps whoever's pulling.
+@rpc("any_peer", "call_local", "reliable")
+func request_wiggle_help() -> void:
+	if multiplayer.is_server() and not rescue.is_empty() and rescue["target"] == _sender():
+		_add_rescue(0.12)
+
+
+func _add_rescue(amount: float) -> void:
+	rescue["progress"] = minf(float(rescue["progress"]) + amount, 1.0)
+	if rescue["progress"] >= 1.0:
+		var target: int = rescue["target"]
+		var by: int = rescue["by"]
+		var what := stuck_in(target)
+		rescue = {}
+		set_stuck(target, "")
+		tell(0, "%s pulled %s out of the %s!" % [players[by]["name"], players[target]["name"], what])
+		_rescued.rpc(target, by)
+	else:
+		_push()
+
+
+## Kept for old callers: start pulling (one tick).
+@rpc("any_peer", "call_local", "reliable")
+func request_free(target: int) -> void:
+	request_pull(target)
+
+
+## Every peer: the rescued friend's own machine lifts them onto solid ground next to the rescuer.
+@rpc("authority", "call_local", "reliable")
+func _rescued(target: int, by: int) -> void:
+	var me: Node3D = null
+	var helper: Node3D = null
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.peer_id == target:
+			me = p
+		elif p.peer_id == by:
+			helper = p
+	if me and helper and me.is_multiplayer_authority():
+		var side: Vector3 = helper.global_basis.x * 0.9
+		me.global_position = helper.global_position + side + Vector3(0, 0.3, 0)
+		me.velocity = Vector3.ZERO
+		me.reset_fall()
 
 
 ## Grab a passed-out friend by the collar and drag them along (E again lets go).
@@ -591,7 +652,7 @@ func _push() -> void:
 		_sync.rpc({
 			"cash": cash, "day": day, "batteries": batteries, "known": known, "house": house,
 			"players": players, "car": car_seats, "quota": quota_index, "police": police_left,
-			"missing": missing_peer, "cheats": cheats,
+			"missing": missing_peer, "cheats": cheats, "rescue": rescue,
 		})
 	changed.emit()
 
@@ -609,6 +670,7 @@ func _sync(state: Dictionary) -> void:
 	police_left = state["police"]
 	missing_peer = state["missing"]
 	cheats = state.get("cheats", false)
+	rescue = state.get("rescue", {})
 	changed.emit()
 
 

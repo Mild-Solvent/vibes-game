@@ -28,7 +28,8 @@ const HOLD_DISTANCE := 1.6
 const LOCAL_ONLY_LAYER := 2  # render layer for our own body, hidden from our own camera
 const EYE_HEIGHT := 1.28  # middle of the big chibi head (head spans ~0.87-1.70 on a 1.7 m character)
 const EYE_FORWARD := -0.32  # just in front of the face
-const DEADLY_FALL_SPEED := 17.0  # landing faster than this (m/s) is fatal
+const DEADLY_FALL_SPEED := 17.0
+const DEADLY_FALL_HEIGHT := 9.0  # metres you have to actually drop for it to kill you  # landing faster than this (m/s) is fatal
 const BREATH_SECONDS := 10.0
 const BATTERY_SECONDS := 150.0  # one battery keeps the flashlight on this long
 const DARK_SECONDS := 35.0  # this long in the dark without light and things start happening
@@ -66,6 +67,7 @@ var noclip := false  # cheat: fly through everything
 var _holding := false
 var _holding_checked := 0
 var _jump_was_down := false
+var _fall_from := 0.0
 var _alive_for := 0.0  # seconds since spawning: no fall damage in the first few (joining, loading)
 var brambles := 0  # how many bramble thickets I'm in (set by the thickets)
 var _beam: MeshInstance3D
@@ -233,9 +235,15 @@ func _physics_process(delta: float) -> void:
 
 	var falling := -velocity.y
 	var was_on_floor := is_on_floor()
+	if was_on_floor:
+		_fall_from = global_position.y
 	move_and_slide()
 	_alive_for += delta
-	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and not swimming and _alive_for > 4.0:
+	# Deadly only if you really dropped a long way (velocity spikes from riding props don't count).
+	var dropped := _fall_from - global_position.y
+	if is_on_floor() and not was_on_floor:
+		_fall_from = global_position.y
+	if is_on_floor() and _fall_speed > DEADLY_FALL_SPEED and dropped > DEADLY_FALL_HEIGHT and not swimming 			and _alive_for > 4.0:
 		Team.request_die.rpc_id(1, "falling from a great height")
 	elif is_on_floor() and not was_on_floor and _fall_speed > 6.0:
 		Sfx.play_all("jump_land", global_position)
@@ -258,6 +266,7 @@ func _physics_process(delta: float) -> void:
 	_update_dark(delta)
 	_pond_thoughts(delta)
 	_update_inspect(delta)
+	_pull_friends(delta)
 
 
 ## Space as a fresh press, whatever modifiers are held (Shift+Space while sprinting counts).
@@ -266,6 +275,37 @@ func _jump_pressed() -> bool:
 	var fresh := down and not _jump_was_down
 	_jump_was_down = down
 	return fresh
+
+
+## A stuck friend in front of you, within pulling range (so you can stay on solid ground).
+func _stuck_friend_ahead() -> Node:
+	var hit = _aimed_at(Team.RESCUE_RANGE)
+	if hit != null and hit.is_in_group("players") and hit != self and Team.stuck_in(hit.peer_id) != "":
+		return hit
+	return null
+
+
+var _pull_tick := 0.0
+
+
+## Hold E on a stuck friend: keep telling the host you're pulling.
+func _pull_friends(delta: float) -> void:
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED or not Input.is_action_pressed("grab"):
+		return
+	var friend := _stuck_friend_ahead()
+	if friend == null:
+		return
+	_pull_tick -= delta
+	if _pull_tick <= 0.0:
+		_pull_tick = 0.1
+		Team.request_pull.rpc_id(1, friend.peer_id)
+
+
+## After being lifted out of something: no fall damage from the teleport.
+func reset_fall() -> void:
+	_fall_speed = 0.0
+	_fall_from = global_position.y
+	_alive_for = 2.5
 
 
 func holding_heavy() -> bool:
@@ -562,12 +602,19 @@ func _use_or_grab() -> void:
 	if in_car():
 		car.request_exit.rpc_id(1)
 		return
+	var hit = _aimed_at()
+	if _stuck_friend_ahead() != null:
+		return  # holding E pulls them out (see _pull_friends)
+	# Helping a friend works with your hands full: drag a passed-out friend along.
+	if hit != null and hit.is_in_group("players") and hit != self:
+		if hit.status() == Team.Status.PASSED_OUT:
+			Team.request_drag.rpc_id(1, hit.peer_id)
+			return
 	if held():
 		_held.request_release.rpc_id(1, false)
 		Sfx.play("drop", global_position)
 		_held = null
 		return
-	var hit = _aimed_at()
 	if hit == null:
 		return
 	if hit is PropScript:
@@ -624,10 +671,13 @@ func _drink() -> void:
 		Team.queue_gag(peer_id, "pond_water", randf_range(30.0, 50.0))
 
 
-func _aimed_at() -> Node:
+func _aimed_at(reach := REACH) -> Node:
 	var from := camera.global_position
-	var query := PhysicsRayQueryParameters3D.create(from, from + aim_direction() * REACH)
-	query.exclude = [get_rid()]
+	var query := PhysicsRayQueryParameters3D.create(from, from + aim_direction() * reach)
+	var skip := [get_rid()]
+	if held():
+		skip.append(_held.get_rid())  # don't aim at the thing in your own hands
+	query.exclude = skip
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return null
@@ -655,6 +705,9 @@ func look_hint() -> String:
 		elif _held is FieldGuideScript:
 			h += " · J read it"
 		return "%s\n%s" % [label, h]
+	var friend := _stuck_friend_ahead()
+	if friend:
+		return "HOLD E  pull %s out of the %s" % [friend.display_name, Team.stuck_in(friend.peer_id)]
 	var hit = _aimed_at()
 	if hit == null:
 		return "F  drink the pond water (don't)" if _looking_at_water() else ""
@@ -669,7 +722,7 @@ func look_hint() -> String:
 		return "%s\nE pick up%s" % [_label_of(hit), extra]
 	if hit.is_in_group("players"):
 		if Team.stuck_in(hit.peer_id) != "":
-			return "E  pull %s out" % hit.display_name
+			return "HOLD E  pull %s out" % hit.display_name
 		if hit.status() == Team.Status.PASSED_OUT:
 			return "E  drag %s along" % hit.display_name
 		return "%s\nH medkit · Q shove" % hit.display_name

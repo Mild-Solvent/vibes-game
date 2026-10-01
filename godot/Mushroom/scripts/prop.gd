@@ -12,7 +12,8 @@ var _home := Transform3D.IDENTITY
 ## Host: how the holder has turned the prop in their hands (yaw, pitch), see set_spin().
 var hold_spin := Vector2.ZERO
 var _last_speed := 0.0
-var carried_by: Node3D = null  # host: the car whose roof rack this rides on
+var carried_by: Node3D = null
+var _ghosted := false  # currently ignoring players because someone holds it  # host: the car whose roof rack this rides on
 
 
 func setup(prop_name: String, mesh: Mesh, shape: Shape3D, color: Color, body_mass: float) -> void:
@@ -50,6 +51,20 @@ func _ready() -> void:
 		contact_monitor = true
 		max_contacts_reported = 4
 		body_entered.connect(func(_body): _on_impact(_last_speed))
+
+
+## Every peer: something being carried doesn't collide with people (no riding the basket into
+## the sky, no shoving friends with it).
+func _process(_delta: float) -> void:
+	var held_now := holder_id != 0
+	if held_now == _ghosted:
+		return
+	_ghosted = held_now
+	for p in get_tree().get_nodes_in_group("players"):
+		if held_now:
+			add_collision_exception_with(p)
+		else:
+			remove_collision_exception_with(p)
 
 
 ## Host only: this prop hit something at `speed` m/s. Override to react (mushrooms break).

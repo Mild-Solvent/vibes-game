@@ -236,6 +236,7 @@ func _process(delta: float) -> void:
 	if _sun:
 		_sun.light_energy = _base_sun * (1.0 - 0.75 * _in_old)
 	get_tree().call_group("hud", "set_grade", _night_amount, _dusk_amount, _in_old, _in_hollow)
+	_update_rope()
 	# The hollows sound wrong.
 	if _in_hollow > 0.5:
 		_eerie_in -= delta
@@ -295,6 +296,45 @@ func apply_state(phase: int, _event: int, _sub: int, time_left: float) -> void:
 		_set_monsters_night()
 		for loc in _locations.values():
 			loc.set_night(night)
+
+
+var _rope: MeshInstance3D
+
+
+## Every peer: a rope between the rescuer and whoever they're pulling out.
+func _update_rope() -> void:
+	var r := Team.rescue
+	var a: Node3D = null
+	var b: Node3D = null
+	if not r.is_empty():
+		a = _player(r["by"])
+		b = _player(r["target"])
+	if a == null or b == null:
+		if _rope:
+			_rope.visible = false
+		return
+	if _rope == null:
+		_rope = MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.025
+		cyl.bottom_radius = 0.025
+		cyl.height = 1.0
+		cyl.radial_segments = 6
+		cyl.rings = 1
+		_rope.mesh = cyl
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.7, 0.55, 0.3)
+		_rope.material_override = mat
+		add_child(_rope)
+	var p1 := a.global_position + Vector3(0, 1.0, 0)
+	var p2 := b.global_position + Vector3(0, 1.0, 0)
+	var mid := (p1 + p2) / 2.0
+	var length := p1.distance_to(p2)
+	_rope.visible = true
+	_rope.global_position = mid
+	var up := (p2 - p1).normalized()
+	var side := up.cross(Vector3.FORWARD if absf(up.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
+	_rope.global_basis = Basis(side, up, side.cross(up)).scaled(Vector3(1, length, 1))
 
 
 func _set_monsters_night() -> void:

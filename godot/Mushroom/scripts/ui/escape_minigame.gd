@@ -1,5 +1,5 @@
 extends Control
-## Getting yourself out of a trap, alone. A friend pressing E on you is always faster.
+## Getting yourself out of a trap, alone. A friend holding E on you is faster (your good wiggles help them).
 ## - Mud: wiggle out in rhythm. Press A, then D, then A... each time the marker is in the green
 ##   window. A miss sinks you deeper; sink all the way and you drown in it.
 ## - Bear trap: like picking a lock. Move the mouse to turn the dial and feel for the sweet spot
@@ -154,6 +154,7 @@ func _mud_press(is_a: bool) -> void:
 	if is_a == _expect_a and c > 0.36 and c < 0.64:
 		_progress += 1
 		_expect_a = not _expect_a
+		Team.request_wiggle_help.rpc_id(1)
 		Sfx.play("splash", Vector3.INF, -8.0)
 		if _progress >= MUD_NEEDED:
 			Team.request_self_free.rpc_id(1)
@@ -198,7 +199,7 @@ func _update_bear(delta: float) -> void:
 		_wrong_hold = 0.0
 	_prompt.text = "HOLD SPACE" if near else ("warmer..." if _closeness() > 0.75 else "turn...")
 	_bar.value = 100.0 * _hold / BEAR_HOLD
-	_info.text = "The bar glows hotter the closer you are. A friend can just pull you out (E)."
+	_info.text = "The bar glows hotter the closer you are. A friend can pull you out (they hold E on you)."
 
 
 # --- input: while a minigame is up it eats the keys and the mouse --------------------------
