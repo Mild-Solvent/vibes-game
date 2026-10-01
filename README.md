@@ -1,41 +1,38 @@
-# STANDBY... GO! (working title)
+# vibes-game
 
-A co-op friendslop game: **you and your friends are the crew of a live show** (TV and theatre).
-The audience only sees what's on camera or on stage. Everything behind it is chaos.
-Plus a mushroom-foraging demo, because the artist liked that idea best.
+Two co-op friendslop games made in Godot 4, sharing one codebase.
 
-## Layout
+- **STANDBY... GO!** You and your friends are the crew of a live TV show or theatre play.
+  The audience only sees what's on camera or on stage. Everything behind it is chaos.
+- **Mushroom Foraging.** Friends lost in a foggy Slovak forest, filling a basket before dark.
 
-| Folder | What |
-|---|---|
-| [`tv-theatre/`](tv-theatre) | Godot project: **STANDBY... GO!** with We're Live! (TV studio) and Places, Please! (theatre) |
-| [`mushroom/`](mushroom) | Godot project: **Mushroom Foraging** (the foggy forest) |
-| [`shared/`](shared) | Code both games use: netcode, player, props, HUD, round loop, level base |
-| `engine/` | Portable Godot 4.7.2, downloaded on first run (not in git) |
-| [`tools/run.ps1`](tools/run.ps1) | Setup + launcher the `.bat` files call |
-| [`docs/design`](docs/design/README.md) | Pitch, GDD, mode ideas, art direction, roadmap |
+## Play
 
-`shared/` is linked into each game as `<game>/shared` (a Windows directory junction made by setup),
-so both games load it as `res://shared/...` and an edit from either editor changes the one copy.
+Double-click **`play.bat`** and pick a number. The first run downloads Godot (about 85 MB) into
+`engine/`; after that it starts instantly. Nothing else needs installing.
 
-## Run it (Windows)
+To play together, one person picks **Host** in the game's menu and the others type the host's IP
+and click **Join** (UDP port 7777). Over the internet, the host forwards UDP 7777, or everyone joins
+the same Tailscale / ZeroTier / Radmin VPN network and uses the host's VPN IP.
 
-Double-click a `.bat` in the repo root. The first one you run downloads Godot into `engine/`
-and links `shared/` (or run `setup.bat` once up front).
+Controls: WASD, Shift sprint, Space jump, E / left click grab & drop, Q / right click throw,
+F taste (mushrooms), Esc frees the mouse.
 
-| File | Does |
-|---|---|
-| `play-tv-theatre.bat` / `play-mushroom.bat` | starts the game |
-| `edit-tv-theatre.bat` / `edit-mushroom.bat` | opens it in the Godot editor (F5 runs it) |
-| `test2p-tv-theatre.bat` / `test2p-mushroom.bat` | two windows on this PC, one hosts and one joins |
+## Folders
 
-In the menu, one player clicks **Host**, everyone else types the host's IP and clicks **Join** (UDP port 7777).
+```
+play.bat           the launcher (play, test with two windows, open in the editor)
+games/tv-theatre/  Godot project: STANDBY... GO! (TV studio + theatre)
+games/mushroom/    Godot project: Mushroom Foraging
+shared/            code both games use (multiplayer, player, props, HUD, round loop)
+engine/            portable Godot, filled in by play.bat (not in git)
+tools/             launcher script
+docs/design/       pitch, game design docs, art direction, roadmap
+```
 
-Playing over the internet: the host forwards UDP 7777, or everyone joins the same
-Tailscale / ZeroTier / Radmin VPN network and uses the host's VPN IP. Steam lobbies come later.
-
-From a terminal: `engine\godot.exe --path tv-theatre -- --host --show=0 --name=Adam` (0 TV, 1 theatre),
-`engine\godot.exe --path mushroom -- --join=127.0.0.1 --name=Denis`.
+`shared/` is linked into each game as `games/<game>/shared` (a Windows directory junction that
+`play.bat` creates), so both games load it as `res://shared/...` and an edit in either editor
+changes the one copy.
 
 ## What's in the prototype
 
@@ -49,16 +46,15 @@ Three playable grey-box demos across the two games. In STANDBY... GO! the host p
 
 Shared bits:
 - **Round loop** (`shared/game_director.gd`, host-run): PREP → LIVE → WRAP, with a score meter
-  (ratings / applause / basket). Each level's rules live in `<game>/scripts/levels/*.gd`.
+  (ratings / applause / basket). Each level's rules live in `games/<game>/scripts/levels/*.gd`.
 - **Multiplayer** (`shared/net.gd`): ENet host/join, MultiplayerSpawner for players,
   client-authoritative movement, host-simulated physics props. Every level of a game is built on
   every peer (far apart), so node paths always match.
-- **Grab, throw and taste** props (`shared/prop.gd`, `mushroom/scripts/mushroom.gd`).
+- **Grab, throw and taste** props (`shared/prop.gd`, `games/mushroom/scripts/mushroom.gd`).
 - The TV studio's on-air camera and the theatre's audience view render to monitors the crew
   can watch (the start of "The Tape").
 
-Controls: WASD, Shift sprint, Space jump, E / left click grab & drop, Q / right click throw,
-F taste (mushrooms), Esc frees the mouse.
+
 
 ## Next spikes (from the roadmap)
 
@@ -71,4 +67,4 @@ F taste (mushrooms), Esc frees the mouse.
 ## Code style
 
 GDScript, formatted with [gdtoolkit](https://github.com/Scony/godot-gdscript-toolkit):
-`gdformat --line-length 120 shared tv-theatre/scripts mushroom/scripts && gdlint shared tv-theatre/scripts mushroom/scripts`.
+`gdformat --line-length 120 shared games && gdlint shared games`.
