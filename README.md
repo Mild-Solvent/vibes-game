@@ -68,3 +68,7 @@ Shared bits:
 
 GDScript, formatted with [gdtoolkit](https://github.com/Scony/godot-gdscript-toolkit):
 `gdformat --line-length 120 shared games && gdlint shared games`.
+
+## Credits
+
+Third-party art and licences: [CREDITS.md](CREDITS.md).
