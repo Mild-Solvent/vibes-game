@@ -8,6 +8,11 @@ signal status_changed(text: String)
 
 const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 8
+## Sync rates. A synchronizer left at its default sends every frame (60-140 a second); with ~480 of
+## them that was ~2 Mbit/s from the host even standing still, enough to clog a home upload and push
+## the ping (and voice) to 300+ ms. Players move smoothly at 30 Hz, everything else is fine at 20.
+const PLAYER_SYNC_HZ := 30.0
+const OTHER_SYNC_HZ := 20.0
 
 var player_name := "Crew"
 var port := DEFAULT_PORT  # --port=N on the command line changes it (handy for testing)
@@ -17,6 +22,7 @@ func _ready() -> void:
 	_setup_input()
 	status_changed.connect(func(text): print("[net] ", text))
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	get_tree().node_added.connect(_tune_sync)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -28,6 +34,7 @@ func host() -> Error:
 	if err != OK:
 		status_changed.emit("Could not host on port %d (error %d)" % [port, err])
 		return err
+	peer.host.compress(ENetConnection.COMPRESS_RANGE_CODER)
 	multiplayer.multiplayer_peer = peer
 	status_changed.emit("Hosting on port %d" % port)
 	player_joined.emit(1, player_name)
@@ -40,6 +47,7 @@ func join(address: String) -> Error:
 	if err != OK:
 		status_changed.emit("Could not connect (error %d)" % err)
 		return err
+	peer.host.compress(ENetConnection.COMPRESS_RANGE_CODER)  # must match the host
 	multiplayer.multiplayer_peer = peer
 	status_changed.emit("Connecting to %s:%d..." % [address, port])
 	return OK
@@ -124,3 +132,35 @@ func _bind_mouse(action: String, button: MouseButton) -> void:
 	var ev := InputEventMouseButton.new()
 	ev.button_index = button
 	InputMap.action_add_event(action, ev)
+
+
+## Every MultiplayerSynchronizer anywhere gets a sane send rate (see PLAYER_SYNC_HZ).
+func _tune_sync(node: Node) -> void:
+	if not node is MultiplayerSynchronizer:
+		return
+	var sync := node as MultiplayerSynchronizer
+	if sync.replication_interval > 0.0:
+		return  # someone chose a rate on purpose
+	var parent := sync.get_parent()
+	var hz := PLAYER_SYNC_HZ if parent != null and parent.is_in_group("players") else OTHER_SYNC_HZ
+	sync.replication_interval = 1.0 / hz
+	sync.delta_interval = 1.0 / hz
+
+
+## Bytes per second in and out over the last call (for the F3 overlay); call about once a second.
+var _bw_t := 0.0
+var _bw := Vector2.ZERO
+
+
+func bandwidth() -> Vector2:
+	var mp := multiplayer.multiplayer_peer
+	if not mp is ENetMultiplayerPeer or (mp as ENetMultiplayerPeer).host == null:
+		return Vector2.ZERO
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _bw_t >= 1.0:
+		var host := (mp as ENetMultiplayerPeer).host
+		var dt := maxf(now - _bw_t, 0.001)
+		_bw = Vector2(host.pop_statistic(ENetConnection.HOST_TOTAL_SENT_DATA),
+			host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA)) / dt
+		_bw_t = now
+	return _bw

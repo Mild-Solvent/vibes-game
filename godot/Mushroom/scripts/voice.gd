@@ -427,9 +427,28 @@ func debug_line() -> String:
 			var pr := (mp as ENetMultiplayerPeer).get_peer(target)
 			if pr:
 				rtt = int(pr.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
-	return "voice: ping %d ms · mic backlog %d ms · play queue %d ms · sent %d recv %d skip %d clear %d" % [
-		rtt, _stats["mic_ms"], _stats["queued_ms"], _stats["sent"], _stats["recv"], _stats["skipped"],
-		_stats["cleared"]]
+	if rtt >= 0:
+		_pings.append(rtt)
+		if _pings.size() > 600:  # ~10 s of frames
+			_pings = _pings.slice(_pings.size() - 600)
+	var lo := 0
+	var hi := 0
+	var avg := 0
+	if not _pings.is_empty():
+		lo = _pings.min()
+		hi = _pings.max()
+		for v in _pings:
+			avg += v
+		avg /= _pings.size()
+	var bw: Vector2 = Net.bandwidth()
+	return ("ping %d ms (10 s: min %d avg %d max %d) · net out %.0f KB/s in %.0f KB/s
+"
+		+ "voice: mic backlog %d ms · play queue %d ms · sent %d recv %d · skip %d clear %d") % [
+		rtt, lo, avg, hi, bw.x / 1024.0, bw.y / 1024.0, _stats["mic_ms"], _stats["queued_ms"],
+		_stats["sent"], _stats["recv"], _stats["skipped"], _stats["cleared"]]
+
+
+var _pings: Array[int] = []
 
 
 # --- per-frame playback and noise -------------------------------------------------

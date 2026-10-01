@@ -79,6 +79,11 @@ var _inspect_dist := 0.4
 var _model_base := 0.0
 
 
+## Where the owner says this body is (synced ~30 times a second); other peers glide towards it.
+var net_pos := Vector3.INF
+var net_rot := Vector3.ZERO
+
+
 func setup(id: int, player_name: String, body_color: Color, character := 0) -> void:
 	peer_id = id
 	variant = character
@@ -267,6 +272,24 @@ func _physics_process(delta: float) -> void:
 	_pond_thoughts(delta)
 	_update_inspect(delta)
 	_pull_friends(delta)
+
+
+## The owner publishes its pose; everyone else eases towards the last one received, so a 30 Hz
+## sync still moves smoothly on a 144 Hz screen. A big jump (respawn, being pulled out) snaps.
+func _smooth_remote(delta: float) -> void:
+	if is_multiplayer_authority():
+		net_pos = position
+		net_rot = rotation
+		return
+	if net_pos == Vector3.INF:
+		return  # nothing received yet
+	if position.distance_to(net_pos) > 4.0:
+		position = net_pos
+	else:
+		position = position.lerp(net_pos, 1.0 - exp(-delta * 20.0))
+	rotation.y = lerp_angle(rotation.y, net_rot.y, 1.0 - exp(-delta * 20.0))
+	rotation.x = net_rot.x
+	rotation.z = net_rot.z
 
 
 ## Space as a fresh press, whatever modifiers are held (Shift+Space while sprinting counts).
@@ -837,8 +860,8 @@ func _build() -> void:
 	var sync := MultiplayerSynchronizer.new()
 	sync.name = "Sync"
 	var config := SceneReplicationConfig.new()
-	config.add_property(NodePath(".:position"))
-	config.add_property(NodePath(".:rotation"))
+	config.add_property(NodePath(".:net_pos"))
+	config.add_property(NodePath(".:net_rot"))
 	config.add_property(NodePath("Head:rotation"))
 	config.add_property(NodePath(".:flashlight_on"))
 	sync.replication_config = config
@@ -847,6 +870,7 @@ func _build() -> void:
 
 ## Every peer: animation, torch, how the status looks, and monster disguise for trippers.
 func _process(delta: float) -> void:
+	_smooth_remote(delta)
 	_torch.visible = flashlight_on
 	_beam.visible = flashlight_on and (Settings.quality if "quality" in Settings else 2) >= 1
 	var s := status()
