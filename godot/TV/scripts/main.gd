@@ -166,6 +166,7 @@ func _activate(mode: int) -> void:
 
 func _handle_command_line() -> void:
 	var host := false
+	var seat := ""
 	var join_address := ""
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--host":
@@ -174,6 +175,15 @@ func _handle_command_line() -> void:
 			join_address = arg.trim_prefix("--join=")
 		elif arg.begins_with("--name="):
 			hud.set_player_name(arg.trim_prefix("--name="))
+		elif arg.begins_with("--prep="):
+			director.prep_override = arg.trim_prefix("--prep=").to_float()
+		elif arg.begins_with("--live="):
+			director.live_override = arg.trim_prefix("--live=").to_float()
+		elif arg.begins_with("--seat="):
+			seat = arg.trim_prefix("--seat=")
+		elif arg.begins_with("--cam="):
+			var v := arg.trim_prefix("--cam=").split_floats(",")
+			get_tree().create_timer(1.6).timeout.connect(_debug_camera.bind(v))
 		elif arg == "--rules":
 			hud.show_rules()
 		elif arg.begins_with("--show="):
@@ -182,3 +192,25 @@ func _handle_command_line() -> void:
 		_on_host_pressed(hud.get_player_name(), hud.get_mode())
 	elif not join_address.is_empty():
 		_on_join_pressed(hud.get_player_name(), join_address)
+	if not seat.is_empty():
+		get_tree().create_timer(1.5).timeout.connect(_debug_seat.bind(seat))
+
+
+## Testing (--seat=<name>): put the local player in a seat, e.g. "desk" or "cam2".
+func _debug_seat(seat: String) -> void:
+	var level: Node = levels[director.mode]
+	if not level.has_method("debug_seat"):
+		return
+	for player in players_root.get_children():
+		if player.is_multiplayer_authority():
+			level.debug_seat(player, seat)
+
+
+## Testing (--cam=x,y,z,tx,ty,tz): look from a fixed spot (world coordinates), for screenshots.
+func _debug_camera(v: PackedFloat64Array) -> void:
+	if v.size() < 6:
+		return
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.look_at_from_position(Vector3(v[0], v[1], v[2]), Vector3(v[3], v[4], v[5]))
+	cam.current = true

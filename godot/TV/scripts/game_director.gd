@@ -8,6 +8,8 @@ const Level := preload("res://scripts/levels/level.gd")
 const PUSH_INTERVAL := 0.15
 
 var running := false
+var prep_override := -1.0  # testing: --prep=<seconds> on the command line
+var live_override := -1.0  # testing: --live=<seconds>
 var levels: Array = []
 
 # Synced state.
@@ -33,7 +35,11 @@ func start(new_mode: int) -> void:
 
 
 func live_elapsed() -> float:
-	return level().live_duration() - time_left
+	return _live_duration() - time_left
+
+
+func _live_duration() -> float:
+	return level().live_duration() if live_override < 0.0 else live_override
 
 
 func _process(delta: float) -> void:
@@ -67,11 +73,11 @@ func _enter(next_phase: int) -> void:
 	_push_timer = 0.0
 	match next_phase:
 		Level.Phase.PREP:
-			time_left = level().prep_duration()
+			time_left = level().prep_duration() if prep_override < 0.0 else prep_override
 			score = level().start_score()
 			level().server_reset()
 		Level.Phase.LIVE:
-			time_left = level().live_duration()
+			time_left = _live_duration()
 		Level.Phase.WRAP:
 			time_left = level().wrap_duration()
 

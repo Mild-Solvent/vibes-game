@@ -14,7 +14,8 @@ const JUMP_VELOCITY := 4.8
 const MOUSE_SENSITIVITY := 0.0025
 const REACH := 3.0
 const HOLD_DISTANCE := 1.6
-const LOCAL_ONLY_LAYER := 2  # render layer for our own body, hidden from our own camera
+const LOCAL_ONLY_LAYER := 2
+const HELP := "E use / grab · Q throw · Esc mouse"  # render layer for our own body, hidden from our own camera
 
 var peer_id := 1
 var display_name := "Crew"
@@ -25,6 +26,10 @@ var variant := 0
 var _anim: AnimationPlayer
 var _last_position := Vector3.ZERO
 var camera: Camera3D
+## What this (local) player sits at: a camera rig, the control desk... null when walking.
+## A seat implements seat_enter(player), seat_exit(player, notify), seat_input(event),
+## seat_help() and seat_status().
+var seat: Node = null
 var _held = null
 var _spawn_position := Vector3.ZERO
 var _visuals: Array[VisualInstance3D] = []
@@ -68,6 +73,11 @@ func _physics_process(delta: float) -> void:
 		return
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
+	_update_prompt()
+	if seat != null:
+		velocity = Vector3(0.0, minf(velocity.y, 0.0), 0.0)
+		move_and_slide()
+		return
 
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if captured and Input.is_action_just_pressed("jump") and is_on_floor():
@@ -90,6 +100,13 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_multiplayer_authority():
 		return
+	if seat != null:
+		if event.is_action_pressed("ui_cancel"):
+			stand_up()
+		else:
+			seat.seat_input(event)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
@@ -104,26 +121,87 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotate_x(-event.relative.y * MOUSE_SENSITIVITY)
 		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-85), deg_to_rad(85))
 	elif event.is_action_pressed("grab"):
-		_toggle_grab()
+		_use()
 	elif event.is_action_pressed("throw"):
 		if is_instance_valid(_held):
 			_held.request_release.rpc_id(1, true)
 		_held = null
 
 
-func _toggle_grab() -> void:
+## Local player only: sit at / operate `new_seat` (already granted).
+func sit(new_seat: Node) -> void:
+	if seat != null:
+		stand_up()
+	if is_instance_valid(_held):
+		_held.request_release.rpc_id(1, false)
+		_held = null
+	seat = new_seat
+	velocity = Vector3.ZERO
+	seat.seat_enter(self)
+	_set_help(seat.seat_help())
+
+
+## Local player only. `notify` = tell the seat (false when the host already took it away).
+func stand_up(notify := true) -> void:
+	if seat == null:
+		return
+	var old := seat
+	seat = null
+	old.seat_exit(self, notify)
+	camera.current = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_set_help(HELP)
+
+
+## E: use what we look at (desk, camera...) if it can be used, else grab / drop a prop.
+func _use() -> void:
 	if is_instance_valid(_held):
 		_held.request_release.rpc_id(1, false)
 		_held = null
 		return
+	var target := _look_target()
+	if target == null:
+		return
+	if target.has_method("interact"):
+		target.interact(self)
+	elif target is PropScript:
+		_held = target
+		_held.request_grab.rpc_id(1)
+
+
+func _look_target() -> Node:
 	var from := camera.global_position
 	var query := PhysicsRayQueryParameters3D.create(from, from + aim_direction() * REACH)
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty() or not (hit.collider is PropScript):
+	if hit.is_empty():
+		return null
+	return hit.collider
+
+
+## Tells the HUD what E would do right now.
+func _update_prompt() -> void:
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud == null:
 		return
-	_held = hit.collider
-	_held.request_grab.rpc_id(1)
+	var text := ""
+	if seat != null:
+		text = seat.seat_status()
+	elif is_instance_valid(_held):
+		text = "E drop · Q throw"
+	else:
+		var target := _look_target()
+		if target != null and target.has_method("interact_prompt"):
+			text = target.interact_prompt(self)
+		elif target is PropScript:
+			text = "E  grab %s" % target.name
+	hud.set_prompt(text)
+
+
+func _set_help(text: String) -> void:
+	var hud := get_tree().get_first_node_in_group("hud")
+	if hud:
+		hud.set_help(text)
 
 
 func _build() -> void:
