@@ -573,6 +573,35 @@ func _build_backdrop() -> void:
 	_root.add_child(_full(_shade))
 
 
+var _update_button: Button
+
+
+## Phones: the in-game updater's button (see updater.gd).
+func _refresh_update() -> void:
+	if _update_button == null:
+		return
+	var r: Dictionary = Updater.remote
+	var mine: String = Updater.version_text()
+	match Updater.status:
+		"checking":
+			_update_button.text = "Checking for updates..."
+		"available":
+			_update_button.text = "Update now (%d KB)" % int(r.get("pck_kb", 0))
+		"downloading":
+			_update_button.text = "Downloading... %d%%" % int(Updater.progress() * 100.0)
+		"ready":
+			_update_button.text = "Restart to finish the update"
+		"apk":
+			_update_button.text = "New app version: download (%d MB)" % int(r.get("apk_mb", 0))
+		"error":
+			_update_button.text = "Update check failed - tap to retry"
+		_:
+			_update_button.text = "Up to date (%s) - check again" % mine
+	_update_button.tooltip_text = str(r.get("notes", ""))
+	if Updater.status == "downloading":
+		get_tree().create_timer(0.3).timeout.connect(_refresh_update, CONNECT_ONE_SHOT)
+
+
 func _build_main() -> Control:
 	var page := _full(Control.new())
 	var side := Gradient.new()
@@ -641,6 +670,11 @@ func _build_main() -> Control:
 		var b := _button(entry[0], _open.bind(entry[1]))
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(b)
+	if Updater.enabled:
+		_update_button = _button("", Updater.press)
+		buttons.add_child(_update_button)
+		Updater.state_changed.connect(_refresh_update)
+		_refresh_update()
 	buttons.add_child(_button("Quit", _quit, "Danger"))
 	_focus["main"] = host
 

@@ -27,6 +27,7 @@ driver/enable_input=true
 
 [autoload]
 
+Updater="*res://scripts/updater.gd"
 Net="*res://scripts/net.gd"
 Team="*res://scripts/team.gd"
 Hearing="*res://scripts/noise.gd"
