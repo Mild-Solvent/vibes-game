@@ -9,7 +9,9 @@
 # A patch can't change project.godot (autoloads, settings), permissions or the engine: ship an APK.
 # Needs: godot/engine/godot.exe with Android templates, JAVA_HOME (JDK 17), gh logged in.
 set -euo pipefail
+exec < /dev/null  # the Android export dies (exit 127) if it inherits a stdin
 cd "$(dirname "$0")/../../.."  # repo root
+ROOT=$(pwd -W 2>/dev/null || pwd)  # Godot on Windows wants C:/..., not /c/...
 MODE=${1:?apk or patch}
 NOTES=${2:-}
 GODOT=./godot/engine/godot.exe
@@ -34,8 +36,8 @@ manifest() {  # build patch pck_url pck_kb
 }
 
 if [ "$MODE" = apk ]; then
-  $GODOT --headless --path $PROJ --export-debug Android "$(pwd)/$OUT/Mushroom-build-$BUILD.apk"
-  $GODOT --headless --path $PROJ --export-pack Android "$(pwd)/$BASE"  # what patches diff against
+  $GODOT --headless --path $PROJ --export-debug Android "$ROOT/$OUT/Mushroom-build-$BUILD.apk"
+  $GODOT --headless --path $PROJ --export-pack Android "$ROOT/$BASE"  # what patches diff against
   gh release create android-build-$BUILD -R $REPO --prerelease --title "Android build $BUILD" \
     --notes "${NOTES:-Android APK build $BUILD.} Install over the old one; after this, updates come through the game's main menu." \
     $OUT/Mushroom-build-$BUILD.apk $BASE
@@ -46,7 +48,7 @@ elif [ "$MODE" = patch ]; then
     | python -c "import json,sys; d=json.load(sys.stdin); print(d['patch'] if d['build']==$BUILD else 0)" 2>/dev/null || echo 0)
   N=$((LAST + 1))
   PCK=$OUT/patch-$BUILD-$N.pck
-  $GODOT --headless --path $PROJ --export-patch Android "$(pwd)/$PCK" --patches "$(pwd)/$BASE"
+  $GODOT --headless --path $PROJ --export-patch Android "$ROOT/$PCK" --patches "$ROOT/$BASE"
   gh release upload android-latest -R $REPO $PCK --clobber
   manifest "$BUILD" "$N" "https://github.com/$REPO/releases/download/android-latest/patch-$BUILD-$N.pck" \
     $(( $(stat -c %s $PCK) / 1000 ))

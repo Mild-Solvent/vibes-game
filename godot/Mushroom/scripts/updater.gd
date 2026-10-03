@@ -12,6 +12,7 @@ extends Node
 ##   button opens the APK download in the browser instead.
 ## A patch only applies to the APK it was made from; a stale one is deleted.
 ## Off on PC unless started with `-- --updater` (for testing the patch loading).
+## This script itself is never patched (it runs before the patch loads): changing it needs an APK.
 ## Publish with tools/android_release.sh.
 
 signal state_changed
@@ -27,6 +28,7 @@ var status := ""
 var patch := 0  ## the patch number running now (0 = the APK as installed)
 var remote := {}
 var enabled := false
+var manifest_url := MANIFEST_URL  ## tests point this elsewhere
 
 var _http: HTTPRequest
 var _file := ""
@@ -71,7 +73,7 @@ func check() -> void:
 		return
 	_set_status("checking")
 	_http.download_file = ""
-	if _http.request(MANIFEST_URL + "?t=%d" % Time.get_unix_time_from_system()) != OK:
+	if _http.request(manifest_url + "?t=%d" % Time.get_unix_time_from_system()) != OK:
 		_set_status("error")
 
 
