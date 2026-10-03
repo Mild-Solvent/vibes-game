@@ -852,7 +852,8 @@ func _build_controls() -> Control:
 	content.add_child(row)
 	var back := _button("Back", _back)
 	row.add_child(back)
-	var note := _label("Left mouse also grabs, right mouse also throws.", "Small")
+	var note := _label("Keyboard and mouse work too." if OS.has_feature("mobile")
+		else "Left mouse also grabs, right mouse also throws.", "Small")
 	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	note.size_flags_vertical = Control.SIZE_SHRINK_CENTER

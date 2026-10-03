@@ -310,6 +310,11 @@ func is_night() -> bool:
 	return level != null and level.get("_night") == true
 
 
+## In the world with no menu or game-over screen up (touch controls show then).
+func playing() -> bool:
+	return _game != null and _game.visible and not menu_open() and not (_over != null and _over.visible)
+
+
 func menu_open() -> bool:
 	return menu != null and menu.is_open()
 

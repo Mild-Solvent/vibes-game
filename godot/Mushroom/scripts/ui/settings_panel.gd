@@ -149,14 +149,16 @@ func _audio_tab() -> Control:
 
 func _controls_tab() -> Control:
 	var box := _column()
-	box.add_child(_section("Mouse"))
-	box.add_child(_slider_row("Mouse sensitivity", 0.0005, 0.008, 0.0001, Settings.mouse_sensitivity,
+	var touch := OS.has_feature("mobile")
+	box.add_child(_section("Touch" if touch else "Mouse"))
+	box.add_child(_slider_row("Look sensitivity" if touch else "Mouse sensitivity", 0.0005, 0.008, 0.0001, Settings.mouse_sensitivity,
 		func(v: float): Settings.set_value("mouse_sensitivity", v), func(v: float): return "%.1f" % (v * 1000.0)))
 	box.add_child(_toggle_row("Invert Y axis", Settings.invert_y, func(on: bool): Settings.set_value("invert_y", on)))
 	box.add_child(_section("Camera"))
 	box.add_child(_slider_row("Field of view", 60.0, 100.0, 1.0, Settings.fov,
 		func(v: float): Settings.set_value("fov", v), func(v: float): return "%d°" % int(v)))
-	box.add_child(_hint("Every key is listed on the Controls page."))
+	box.add_child(_hint("The on-screen buttons are explained on the Controls page." if touch
+		else "Every key is listed on the Controls page."))
 	return box
 
 

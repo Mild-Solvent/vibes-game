@@ -77,12 +77,29 @@ Godot Engine (godotengine.org) - MIT licence, (c) the Godot Engine contributors
 """
 
 
+## Shown above the keyboard list on phones (the on-screen buttons have these labels).
+const TOUCH_CONTROLS := [
+	["Left thumb", "Move (a joystick appears where you touch)"],
+	["Right side", "Drag to look around"],
+	["JUMP", "Jump / swim up / brake in the car / hold to prise a bear trap"],
+	["E", "Grab, use, get in the car; hold on a stuck friend to pull"],
+	["Q", "Throw what you hold / shove someone"],
+	["EAT", "Taste what you hold / use"],
+	["LIGHT", "Flashlight / force-feed a friend (spam it)"],
+	["RUN", "Sprint on / off"],
+	["MIC", "Mute your voice"],
+	["II", "Pause menu"],
+	["Tap L / R", "Stuck in mud: tap the left and right halves in turn"],
+]
+
+
 static func controls() -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 22)
 	grid.add_theme_constant_override("v_separation", 10)
-	for entry in CONTROLS:
+	var entries: Array = (TOUCH_CONTROLS + CONTROLS) if OS.has_feature("mobile") else CONTROLS
+	for entry in entries:
 		var caps := HBoxContainer.new()
 		caps.add_theme_constant_override("separation", 6)
 		caps.alignment = BoxContainer.ALIGNMENT_END

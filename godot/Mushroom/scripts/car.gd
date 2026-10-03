@@ -141,7 +141,7 @@ func _physics_process(delta: float) -> void:
 		var axis := up.cross(Vector3.UP)
 		apply_torque(axis * mass * 14.0)
 	var driving: bool = seats[0] != 0 and seats[0] == multiplayer.get_unique_id()
-	if driving and (autodrive or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
+	if driving and (autodrive or Touch.captured()):
 		var throttle := 1.0 if autodrive else Input.get_axis("move_back", "move_forward")
 		# Less steering at speed, but a hard turn flat out can still roll it.
 		var speed_factor := clampf(1.0 - linear_velocity.length() / 40.0, 0.4, 1.0)

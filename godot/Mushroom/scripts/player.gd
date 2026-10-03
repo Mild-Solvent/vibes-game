@@ -173,7 +173,7 @@ func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
 	var s := status()
-	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	var captured: bool = Touch.captured()
 	$Collision.disabled = s == Team.Status.DEAD or in_car()
 	camera.fov = Settings.fov if "fov" in Settings else 80.0
 
@@ -318,7 +318,7 @@ var _pull_tick := 0.0
 
 ## Hold E on a stuck friend: keep telling the host you're pulling.
 func _pull_friends(delta: float) -> void:
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED or not Input.is_action_pressed("grab"):
+	if not Touch.captured() or not Input.is_action_pressed("grab"):
 		return
 	var friend := _stuck_friend_ahead()
 	if friend == null:
@@ -441,7 +441,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
-	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if not Touch.captured():
 		if event is InputEventMouseButton and event.pressed and not _menu_open():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			get_viewport().set_input_as_handled()
@@ -882,7 +882,7 @@ func _process(delta: float) -> void:
 	_smooth_remote(delta)
 	if Touch.active and is_multiplayer_authority():
 		var turn: Vector2 = Touch.take_look()
-		if turn != Vector2.ZERO and not _inspecting and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if turn != Vector2.ZERO and not _inspecting and Touch.captured():
 			_look(turn)
 	_torch.visible = flashlight_on
 	_beam.visible = flashlight_on and (Settings.quality if "quality" in Settings else 2) >= 1

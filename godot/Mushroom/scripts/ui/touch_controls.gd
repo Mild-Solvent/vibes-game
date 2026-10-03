@@ -7,7 +7,9 @@ extends CanvasLayer
 ## - Buttons send the same input actions as the keyboard (jump, sprint, grab = E, throw = Q,
 ##   taste = F, flashlight = T, voice_mute = M, ui_cancel = Esc), so the game code doesn't
 ##   know the difference.
-## The controls show only while playing (mouse "captured"); menus are tapped like normal buttons.
+## The controls show only while playing (HUD up, no menu); menus are tapped like normal buttons.
+## A phone without a mouse can't "capture" it, so gameplay code asks Touch.captured() instead of
+## checking Input.mouse_mode itself.
 ## Also asks for the microphone permission on Android and starts voice once it's granted.
 
 const STICK_RADIUS := 90.0
@@ -57,8 +59,18 @@ func take_look() -> Vector2:
 	return d
 
 
+## Is the player in control of their character? Mouse captured on PC; HUD up and no menu on touch.
+func captured() -> bool:
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		return true
+	if not active:
+		return false
+	var hud = get_tree().get_first_node_in_group("hud")
+	return hud != null and hud.has_method("playing") and hud.playing()
+
+
 func _playing() -> bool:
-	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	return active and captured()
 
 
 func _layout() -> void:
