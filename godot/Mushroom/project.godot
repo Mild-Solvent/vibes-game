@@ -34,13 +34,20 @@ Voice="*res://scripts/voice.gd"
 Sfx="*res://scripts/sfx.gd"
 Settings="*res://scripts/settings.gd"
 SessionLog="*res://scripts/session_log.gd"
+Touch="*res://scripts/ui/touch_controls.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/stretch/mode.mobile="canvas_items"
+window/stretch/aspect.mobile="expand"
+window/stretch/scale.mobile=1.15
+window/handheld/orientation=4
 
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+scaling_3d/scale.mobile=0.67

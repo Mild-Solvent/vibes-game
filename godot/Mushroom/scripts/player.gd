@@ -457,16 +457,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 	if event is InputEventMouseMotion:
-		if status() == Team.Status.PASSED_OUT:
-			return
-		var sens := _sensitivity()
-		var invert := -1.0 if ("invert_y" in Settings and Settings.invert_y) else 1.0
-		if in_car():
-			_car_look = wrapf(_car_look - event.relative.x * sens, -PI, PI)
-		else:
-			rotate_y(-event.relative.x * sens)
-		head.rotate_x(-event.relative.y * sens * invert)
-		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-85), deg_to_rad(85))
+		_look(event.relative * _sensitivity())
 		return
 	if event.is_action_pressed("flashlight"):
 		_flashlight_or_feed()
@@ -509,6 +500,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			if Input.is_key_pressed(KEY_CTRL):
 				_spin.y = wrapf(_spin.y + step, -PI, PI)
 			_held.set_spin.rpc_id(1, _spin)
+
+
+## Turn the camera by `turn` radians (mouse, or the touch look drag).
+func _look(turn: Vector2) -> void:
+	if status() == Team.Status.PASSED_OUT:
+		return
+	var invert := -1.0 if ("invert_y" in Settings and Settings.invert_y) else 1.0
+	if in_car():
+		_car_look = wrapf(_car_look - turn.x, -PI, PI)
+	else:
+		rotate_y(-turn.x)
+	head.rotate_x(-turn.y * invert)
+	head.rotation.x = clampf(head.rotation.x, deg_to_rad(-85), deg_to_rad(85))
 
 
 # --- inspecting ------------------------------------------------------------------------
@@ -876,6 +880,10 @@ func _build() -> void:
 ## Every peer: animation, torch, how the status looks, and monster disguise for trippers.
 func _process(delta: float) -> void:
 	_smooth_remote(delta)
+	if Touch.active and is_multiplayer_authority():
+		var turn: Vector2 = Touch.take_look()
+		if turn != Vector2.ZERO and not _inspecting and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			_look(turn)
 	_torch.visible = flashlight_on
 	_beam.visible = flashlight_on and (Settings.quality if "quality" in Settings else 2) >= 1
 	var s := status()

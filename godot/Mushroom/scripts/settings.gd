@@ -50,6 +50,9 @@ func _ready() -> void:
 	_ensure_bus("Music")
 	_ensure_bus("SFX")
 	_ensure_bus("Voice")
+	if OS.has_feature("mobile"):
+		quality = 0  # phones start on Low (a saved choice still wins)
+		mouse_sensitivity = 0.0035  # the touch look drag scales with this
 	load_settings()
 	apply()
 

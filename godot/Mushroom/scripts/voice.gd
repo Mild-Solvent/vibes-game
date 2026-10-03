@@ -180,6 +180,14 @@ func _start_mic() -> void:
 	_mic_player.play()
 
 
+## Android: the mic permission arrived after the mic was started, so start it again.
+func restart_mic() -> void:
+	if _mic_player == null:
+		return
+	_mic_player.stop()
+	_mic_player.play()
+
+
 func _read_input(delta: float) -> void:
 	if _fake_mic:
 		_fake_acc += delta * RATE

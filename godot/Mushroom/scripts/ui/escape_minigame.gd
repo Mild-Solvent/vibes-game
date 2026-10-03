@@ -179,7 +179,7 @@ func _update_bear(delta: float) -> void:
 	var near := absf(wrapf(_dial - _sweet, -PI, PI)) < BEAR_SWEET
 	_marker.position.x = fposmod(_dial / TAU, 1.0) * (_track.size.x - _marker.size.x)
 	_track.color = Color(0.1, 0.08, 0.06).lerp(Color(0.85, 0.35, 0.1), pow(_closeness(), 4.0))
-	var holding := Input.is_physical_key_pressed(KEY_SPACE)
+	var holding := Input.is_physical_key_pressed(KEY_SPACE) or Input.is_action_pressed("jump")  # JUMP on a phone
 	if holding and near:
 		_hold += delta
 		_wrong_hold = 0.0
@@ -213,5 +213,12 @@ func _input(event: InputEvent) -> void:
 			_mud_press(event.physical_keycode == KEY_A)
 			get_viewport().set_input_as_handled()
 	elif _kind == "bear trap" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		_dial = wrapf(_dial + event.relative.x * 0.004, 0.0, TAU)
+		get_viewport().set_input_as_handled()
+	# Phones: tap the left / right half for A / D, drag anywhere to turn the dial.
+	elif _kind == "mud" and event is InputEventScreenTouch and event.pressed:
+		_mud_press(event.position.x < get_viewport().get_visible_rect().size.x * 0.5)
+		get_viewport().set_input_as_handled()
+	elif _kind == "bear trap" and event is InputEventScreenDrag:
 		_dial = wrapf(_dial + event.relative.x * 0.004, 0.0, TAU)
 		get_viewport().set_input_as_handled()
