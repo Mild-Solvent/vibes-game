@@ -28,6 +28,7 @@ const HOLD_DISTANCE := 1.6
 const LOCAL_ONLY_LAYER := 2  # render layer for our own body, hidden from our own camera
 const EYE_HEIGHT := 1.28  # middle of the big chibi head (head spans ~0.87-1.70 on a 1.7 m character)
 const EYE_FORWARD := -0.32  # just in front of the face
+const LEAN_DOWN := 0.3  # extra forward when looking straight down (clears the chunky body)
 const DEADLY_FALL_SPEED := 17.0
 const DEADLY_FALL_HEIGHT := 9.0  # metres you have to actually drop for it to kill you  # landing faster than this (m/s) is fatal
 const BREATH_SECONDS := 10.0
@@ -182,12 +183,20 @@ func _physics_process(delta: float) -> void:
 		global_position = car.seat_position(car.seat_of(peer_id)) - Vector3(0, 0.6, 0)
 		# Face where the car faces (its front is +Z, ours is -Z), plus however you've looked round.
 		rotation.y = car.global_rotation.y + PI + _car_look
-		camera.position = Vector3(0, 1.4, 6.5)  # chase camera behind the car
+		# Chase camera behind and above the car. The head's pitch would swing that offset round
+		# (look up and the camera ends up under the car), so undo the pitch on the offset and keep
+		# the tilt small.
+		head.rotation.x = clampf(head.rotation.x, deg_to_rad(-35), deg_to_rad(15))
+		camera.position = Vector3(0, 1.4, 6.5).rotated(Vector3.RIGHT, -head.rotation.x)
 		velocity = Vector3.ZERO
 		_fall_speed = 0.0
 		_update_torch(delta)
 		return
-	camera.position = Vector3(0, 0, EYE_FORWARD)
+	# Eyes in front of the face, level with it whatever the pitch (rotated with the head, looking
+	# down sank the camera into your own chest). Looking down also leans forward a little, so you
+	# see your feet rather than a wall of jacket.
+	var down := maxf(0.0, -sin(head.rotation.x))
+	camera.position = Vector3(0, 0, EYE_FORWARD - LEAN_DOWN * down).rotated(Vector3.RIGHT, -head.rotation.x)
 	_car_look = 0.0
 
 	if s == Team.Status.DEAD or noclip:
@@ -721,8 +730,22 @@ func _aimed_at(reach := REACH) -> Node:
 
 ## What the crosshair is on, for the HUD hint.
 func look_hint() -> String:
+	var hint := _look_hint()
+	if Touch.active:  # name the on-screen buttons instead of keys
+		hint = hint.replace("· F ", "· EAT ")
+		if hint.begins_with("F  "):
+			hint = "EAT" + hint.substr(1)
+		hint = hint.replace("SPAM T!", "SPAM LIGHT!").replace("T at a friend", "LIGHT at a friend")
+		hint = hint.replace(" · wheel/R turn it", "").replace(" · hold RMB: INSPECT", "")
+	return hint
+
+
+func _look_hint() -> String:
 	if in_car():
-		return "W/S drive · A/D steer · Space brake · E get out" if get_car().seat_of(peer_id) == 0 else "E get out"
+		if get_car().seat_of(peer_id) != 0:
+			return "E get out"
+		return ("joystick drive & steer · JUMP brake · E get out" if Touch.active
+			else "W/S drive · A/D steer · Space brake · E get out")
 	if Team.stuck_in(peer_id) != "":
 		return "You're stuck in a %s! Shout for a friend to pull you out." % Team.stuck_in(peer_id)
 	var duel := _duel()

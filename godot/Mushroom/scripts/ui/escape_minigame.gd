@@ -140,7 +140,8 @@ func _update_mud() -> void:
 	_window.size = Vector2(_track.size.x * 0.28, _track.size.y)
 	_marker.position.x = _mud_cursor() * (_track.size.x - _marker.size.x)
 	_bar.value = 100.0 * _progress / MUD_NEEDED
-	_info.text = ("Get ready..." if _t < MUD_GRACE else "Tap the letter ONCE when the marker is in the green.") + "   %d/%d   sunk: %s" % [
+	_info.text = ("Get ready..." if _t < MUD_GRACE else ("Tap that side of the screen ONCE when the marker is in the green." if Touch.active
+		else "Tap the letter ONCE when the marker is in the green.")) + "   %d/%d   sunk: %s" % [
 		_progress, MUD_NEEDED, "▮".repeat(_misses) + "▯".repeat(MUD_MISSES - _misses)]
 
 
@@ -174,7 +175,8 @@ func _closeness() -> float:
 
 
 func _update_bear(delta: float) -> void:
-	_title.text = "BEAR TRAP - feel for the spot (mouse), then hold SPACE"
+	_title.text = ("BEAR TRAP - drag to feel for the spot, then hold JUMP" if Touch.active
+		else "BEAR TRAP - feel for the spot (mouse), then hold SPACE")
 	_window.visible = false
 	var near := absf(wrapf(_dial - _sweet, -PI, PI)) < BEAR_SWEET
 	_marker.position.x = fposmod(_dial / TAU, 1.0) * (_track.size.x - _marker.size.x)
@@ -197,7 +199,7 @@ func _update_bear(delta: float) -> void:
 	else:
 		_hold = maxf(_hold - delta * 2.0, 0.0)
 		_wrong_hold = 0.0
-	_prompt.text = "HOLD SPACE" if near else ("warmer..." if _closeness() > 0.75 else "turn...")
+	_prompt.text = ("HOLD JUMP" if Touch.active else "HOLD SPACE") if near else ("warmer..." if _closeness() > 0.75 else "turn...")
 	_bar.value = 100.0 * _hold / BEAR_HOLD
 	_info.text = "The bar glows hotter the closer you are. A friend can pull you out (they hold E on you)."
 
